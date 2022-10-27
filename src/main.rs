@@ -1,6 +1,7 @@
 use std::io::BufReader;
 use std::{io, thread};
 use std::time::Duration;
+use app::Project;
 use crossterm::execute;
 use crossterm::event::{EnableMouseCapture, DisableMouseCapture, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -23,53 +24,12 @@ static CONTENT: &str = r#"1.Check the "Autoloading and Reloading Constants" guid
 7.↳ app/lib/i18n_extensions/hybrid_backend.rb:43:in `populate_translations'
 8.DEPRECATION WARNING: Initialization autoloaded the constants ApplicationRecord, Hideable, Language, I18nExtensions, I18nExtensions::HybridBackend, and AnyLogin::ApplicationHelper."#;
 
-fn split_by_size<'a>(input: &'a str, len: u16) -> Vec<String> {
-  input.lines()
-    .flat_map(|line| {
-      let mut curr = line;
-      let mut sublines = vec![];
-
-      while curr.len() > len as usize {
-        let (a,b) = curr.split_at(len as usize);
-        sublines.push(a);
-        curr = b;
-      }
-
-      if !curr.is_empty() {
-        sublines.push(curr);
-      }
-
-      sublines
-    })
-    .map(str::to_owned)
-    .collect()
-}
-fn split_by_sizeref<'a>(input: &'a str, len: u16) -> Vec<&'a str> {
-  input.lines()
-    .flat_map(|line| {
-      let mut curr = line;
-      let mut sublines = vec![];
-
-      while curr.len() > len as usize {
-        let (a,b) = curr.split_at(len as usize);
-        sublines.push(a);
-        curr = b;
-      }
-
-      if !curr.is_empty() {
-        sublines.push(curr);
-      }
-
-      sublines
-    })
-    .collect()
-}
-
 fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
   let size = frame.size();
   let block = Block::default()
     .style(Style {
       bg: Some(Color::White),
+      fg: Some(Color::Black),
       ..Style::default()
     })
     .title("Processes")
@@ -92,18 +52,27 @@ fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
       fg: Some(Color::Black),
       ..Style::default()
     })
-    .wrap(Wrap { trim: false })
-    .scroll((1000, 0));
+    .wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, chunks[1]);
 
   let sidebar_block = Block::default()
     .borders(Borders::ALL)
     .title("Projects");
-  let sidebar = List::new(vec![ListItem::new("Frontend"), ListItem::new("Backend"), ListItem::new("Management")])
-    .block(sidebar_block);
+  let items = app.projects.iter()
+    .map(|p| ListItem::new(p.name.as_str()))
+    .collect::<Vec<ListItem>>();
+
+  let sidebar = List::new(items)
+    .block(sidebar_block)
+    .highlight_style(Style {
+      fg: Some(Color::Blue),
+      ..Style::default()
+    });
   let mut state = ListState::default();
-  state.select(Some(1));
+  if let Some(idx) = app.active_project {
+    state.select(Some(idx as usize));
+  }
   frame.render_stateful_widget(sidebar, chunks[0], &mut state);
 
 }
@@ -121,10 +90,19 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
         Event::Key(evt) => {
           match evt.code {
             KeyCode::Char(ch) => {
-              if ch == 'q' {
-                return Ok(());
+              match ch {
+                  'q' => {
+                    return Ok(());
+                  },
+                  _ => {}
               }
-            }
+            },
+            KeyCode::Up => {
+              app.select_prev();
+            },
+            KeyCode::Down => {
+              app.select_next();
+            },
             _ => {}
           }
         },
@@ -136,24 +114,25 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
   }
   Ok(())
 }
+// dir
+// executable
 use std::io::BufRead;
 fn main() {
-  use std::process::{Command, Stdio};
-  let mut cmd = Command::new("/bin/bash")
-  .arg("-c")
-  .arg("bundle exec rails s -p 3030")
-  .current_dir("/Users/vmaryn/telapp/tas")
-    .stdout(Stdio::piped())
-    .spawn()
-    .expect("Failed to spawn child process");
-  let out = cmd.stdout.unwrap();
-  let mut reader = BufReader::new(out);
-  for line in reader.lines() {
-    println!("Line {}", line.unwrap());
-  }
+  // use std::process::{Command, Stdio};
+  // let mut cmd = Command::new("/bin/bash")
+  // .arg("-c")
+  // .arg("bundle exec rails s -p 3030")
+  // .current_dir("/Users/vmaryn/telapp/tas")
+  //   .stdout(Stdio::piped())
+  //   .spawn()
+  //   .expect("Failed to spawn child process");
+  // let out = cmd.stdout.unwrap();
+  // let mut reader = BufReader::new(out);
+  // for line in reader.lines() {
+  //   println!("Line {}", line.unwrap());
+  // }
 
-
-  return;
+  // return;
   let mut out = std::io::stdout();
 
   enable_raw_mode().unwrap();
@@ -162,9 +141,13 @@ fn main() {
   let backend = CrosstermBackend::new(out);
   let mut terminal = Terminal::new(backend).unwrap();
   let mut  app = App::default();
+  app.projects = vec![
+    Project::new("Core Api".to_string(), "bundle exec rails s -p 3030".to_string(), "/Users/vmaryn/telapp/tas".to_string()),
+    Project::new("Admin App".to_string(), "bundle exec rails s -p 3100".to_string(), "/Users/vmaryn/telapp/admin".to_string()),
+  ];
+  app.active_project = Some(1);
 
   run(&mut terminal, & mut app);
-
 
   disable_raw_mode().unwrap();
   execute!(
