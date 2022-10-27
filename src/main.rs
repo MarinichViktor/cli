@@ -1,3 +1,4 @@
+use std::io::BufReader;
 use std::{io, thread};
 use std::time::Duration;
 use crossterm::execute;
@@ -82,8 +83,8 @@ fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
     ])
     .split(frame.size());
   // Constraint::Percentage()
-  let data = std::fs::read_to_string("/home/vmaryn/projects/ruby/sport-news/log/development.log").unwrap();
-  app.content = data;
+  // let data = std::fs::read_to_string("/home/vmaryn/projects/ruby/sport-news/log/development.log").unwrap();
+  app.content = CONTENT.to_string();
 
   let paragraph = Paragraph::new(app.lines(block.inner(size).width).join("\n"))
     .block(block)
@@ -135,8 +136,24 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
   }
   Ok(())
 }
-
+use std::io::BufRead;
 fn main() {
+  use std::process::{Command, Stdio};
+  let mut cmd = Command::new("/bin/bash")
+  .arg("-c")
+  .arg("bundle exec rails s -p 3030")
+  .current_dir("/Users/vmaryn/telapp/tas")
+    .stdout(Stdio::piped())
+    .spawn()
+    .expect("Failed to spawn child process");
+  let out = cmd.stdout.unwrap();
+  let mut reader = BufReader::new(out);
+  for line in reader.lines() {
+    println!("Line {}", line.unwrap());
+  }
+
+
+  return;
   let mut out = std::io::stdout();
 
   enable_raw_mode().unwrap();
@@ -155,6 +172,6 @@ fn main() {
         LeaveAlternateScreen,
         DisableMouseCapture
     ).unwrap();
-  terminal.show_cursor().unwrap();
+  // terminal.show_cursor().unwrap();
 }
 
