@@ -7,7 +7,8 @@ use std::sync::Arc;
 pub struct App {
   pub content: String,
   pub projects: Vec<Project>,
-  pub active_project: Option<u8>
+  pub active_project: Option<u8>,
+  pub active_tab: AppTab,
 }
 
 impl Default for App {
@@ -15,7 +16,8 @@ impl Default for App {
     App {
       content: String::new(),
       projects: vec![],
-      active_project: None
+      active_project: None,
+      active_tab: AppTab::Sidebar
     }
   }
 }
@@ -131,4 +133,9 @@ impl Project {
       .map(str::to_owned)
       .collect()
   }
+}
+
+pub enum AppTab {
+  Sidebar,
+  Console
 }

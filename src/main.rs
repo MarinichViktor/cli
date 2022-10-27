@@ -1,7 +1,7 @@
 use std::io::BufReader;
 use std::{io, thread};
 use std::time::Duration;
-use app::Project;
+use app::{Project, AppTab};
 use crossterm::execute;
 use crossterm::event::{EnableMouseCapture, DisableMouseCapture, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -26,7 +26,7 @@ static CONTENT: &str = r#"1.Check the "Autoloading and Reloading Constants" guid
 
 fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
   let size = frame.size();
-  let block = Block::default()
+  let mut block = Block::default()
     .style(Style {
       bg: Some(Color::White),
       fg: Some(Color::Black),
@@ -46,19 +46,30 @@ fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
   // let data = std::fs::read_to_string("/home/vmaryn/projects/ruby/sport-news/log/development.log").unwrap();
   app.content = CONTENT.to_string();
 
-  let paragraph = Paragraph::new(app.lines(block.inner(size).width).join("\n"))
+
+
+
+  let mut sidebar_block = Block::default()
+    .borders(Borders::ALL)
+    .title("Projects");
+  
+    match app.active_tab {
+        AppTab::Sidebar => {
+          sidebar_block = sidebar_block.border_style(Style::default().bg(Color::Green))
+        }
+        AppTab::Console => {
+          block = block.border_style(Style::default().bg(Color::Green))
+        }
+    }
+    let paragraph = Paragraph::new(app.lines(block.inner(size).width).join("\n"))
     .block(block)
     .style(Style {
       fg: Some(Color::Black),
       ..Style::default()
     })
     .wrap(Wrap { trim: false });
+    frame.render_widget(paragraph, chunks[1]);
 
-  frame.render_widget(paragraph, chunks[1]);
-
-  let sidebar_block = Block::default()
-    .borders(Borders::ALL)
-    .title("Projects");
   let items = app.projects.iter()
     .map(|p| ListItem::new(p.name.as_str()))
     .collect::<Vec<ListItem>>();
@@ -98,10 +109,24 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
               }
             },
             KeyCode::Up => {
-              app.select_prev();
+              match app.active_tab {
+                AppTab::Sidebar => {
+                  app.select_prev();
+                }
+                AppTab::Console => {
+                  
+                }
+              }
             },
             KeyCode::Down => {
-              app.select_next();
+              match app.active_tab {
+                AppTab::Sidebar => {
+                  app.select_next();
+                }
+                AppTab::Console => {
+                  
+                }
+              }
             },
             _ => {}
           }
@@ -145,7 +170,7 @@ fn main() {
     Project::new("Core Api".to_string(), "bundle exec rails s -p 3030".to_string(), "/Users/vmaryn/telapp/tas".to_string()),
     Project::new("Admin App".to_string(), "bundle exec rails s -p 3100".to_string(), "/Users/vmaryn/telapp/admin".to_string()),
   ];
-  app.active_project = Some(1);
+  app.active_project = Some(0);
 
   run(&mut terminal, & mut app);
 
