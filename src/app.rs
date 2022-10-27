@@ -1,7 +1,8 @@
+use std::str::FromStr;
 use std::{sync::Mutex, time::Instant, vec, process::Child, io};
 use std::result::{Result};
 use std::error::{Error};
-
+use std::sync::Arc;
 
 pub struct App {
   pub content: String,
@@ -21,25 +22,21 @@ impl Default for App {
 
 impl App {
   pub fn lines(&mut self, width: u16) -> Vec<String> {
-    self.content.lines()
-      .flat_map(|line| {
-        let mut curr = line;
-        let mut sublines = vec![];
+    match self.selected_project() {
+      Some(p) => {
+          p.lines(width)
+      }
+      None => vec![String::from("Fallback text")]
+    }
+  }
 
-        while curr.len() > width as usize {
-            let (a,b) = curr.split_at(width as usize);
-            sublines.push(a);
-            curr = b;
-        }
-
-        if !curr.is_empty() {
-            sublines.push(curr);
-        }
-
-        sublines
-      })
-      .map(str::to_owned)
-      .collect()
+  pub fn selected_project<'a>(&'a mut self) -> Option<&'a mut Project> {
+    match self.active_project {
+      Some(idx) => {
+        Some(&mut self.projects[idx as usize])
+      }
+      None => None
+    }
   }
 
   pub fn select_next(&mut self) {
@@ -71,7 +68,7 @@ pub struct Project {
   pub name: String,
   pub executable: String,
   pub workdir: String,
-  pub output: Mutex<String>,
+  pub output: Arc<Mutex<String>>,
   pub started_at: Option<Instant>,
   pub finished_at: Option<Instant>,
   child: Option<Child>,
@@ -79,11 +76,12 @@ pub struct Project {
 
 impl Project {
   pub fn new(name: String, executable: String, workdir: String) -> Self {
+    let n = name.clone();
     Project {
       name,
       executable,
       workdir,
-      output: Mutex::default(),
+      output: Arc::new(Mutex::new(format!("{} -- {}", n, "Some interesting\n content".to_string()))),
       started_at: None,
       finished_at: None,
       child: None
@@ -111,7 +109,9 @@ impl Project {
   }
 
   pub fn lines(&mut self, width: u16) -> Vec<String> {
-    self.output.lines()
+    self.output.lock()
+      .unwrap()
+      .lines()
       .flat_map(|line| {
         let mut curr = line;
         let mut sublines = vec![];
