@@ -8,7 +8,7 @@ use tui::layout::{Constraint, Direction, Layout};
 use tui::style::{Color, Style};
 use tui::{Frame, Terminal};
 use tui::text::Text;
-use tui::widgets::{Block, Borders, List, ListItem, Paragraph, Wrap};
+use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use crate::app::App;
 
 mod app;
@@ -77,7 +77,7 @@ fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
   let chunks = Layout::default()
     .direction(Direction::Horizontal)
     .constraints([
-      Constraint::Length(50),
+      Constraint::Length(25),
       Constraint::Min(0),
     ])
     .split(frame.size());
@@ -94,77 +94,51 @@ fn draw_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
     .wrap(Wrap { trim: false })
     .scroll((1000, 0));
 
+  frame.render_widget(paragraph, chunks[1]);
 
   let sidebar_block = Block::default()
     .borders(Borders::ALL)
     .title("Projects");
   let sidebar = List::new(vec![ListItem::new("Frontend"), ListItem::new("Backend"), ListItem::new("Management")])
     .block(sidebar_block);
-  frame.render_widget(sidebar, chunks[0]);
-  frame.render_widget(paragraph, chunks[1]);
+  let mut state = ListState::default();
+  state.select(Some(1));
+  frame.render_stateful_widget(sidebar, chunks[0], &mut state);
 
 }
 
 fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> {
-  // loop {
+  loop {
     terminal.draw(|f| {
       draw_ui(f, app);
-      // let size = f.size();
-      // let block = Block::default()
-      //   .title("Processes")
-      //   .borders(Borders::LEFT);
-      //
-      // let chunks = Layout::default()
-      //   .constraints([
-      //     Constraint::Length(20),
-      //     Constraint::Length(20),
-      //   ])
-      //   .split(f.size());
-      // // Constraint::Percentage()
-      // let data = std::fs::read_to_string("/home/vmaryn/projects/ruby/sport-news/log/development.log").unwrap();
-      //
-      // let paragraph = Paragraph::new(data)
-      //   .block(block)
-      //   .style(Style {
-      //     fg: Some(Color::Cyan),
-      //     ..Style::default()
-      //   })
-      //   .scroll((3000, 0))
-      //   .wrap(Wrap { trim: false });
-      //
-      // f.render_widget(paragraph, size);
     }).unwrap();
 
-    // let poll_duration = Duration::from_millis(200);
-    //
-    // if crossterm::event::poll(poll_duration)? {
-    //   match crossterm::event::read()? {
-    //     Event::Key(code) => {},
-    //     Event::Resize(x, y) => {},
-    //     _ => {}
-    //   }
-    // };
-  // }
+    let poll_duration = Duration::from_millis(200);
+
+    if crossterm::event::poll(poll_duration)? {
+      match crossterm::event::read()? {
+        Event::Key(evt) => {
+          match evt.code {
+            KeyCode::Char(ch) => {
+              if ch == 'q' {
+                return Ok(());
+              }
+            }
+            _ => {}
+          }
+        },
+        Event::Resize(x, y) => {},
+        _ => {}
+      }
+    };
+
+  }
   Ok(())
 }
 
 fn main() {
-  // let input ="I18n\nExtensions, I18nExtensions::HybridBackend, and AnyLogin::ApplicationHelper";
-  // let mut data = std::fs::read_to_string("/home/vmaryn/projects/ruby/sport-news/log/development.log").unwrap();
-  // // let items = split_by_size(&data, 50);
-  // let items = split_by_sizeref(&data, 100);
-  //
-  // // for x in &items {
-  // //   println!("{}", x);
-  // // }
-  //
-  //
-  // // for x in &items {
-  // //   println!("{}", x);
-  // // }
-  // println!("data len {} {}", data.len(), items.len());
-  // return;
   let mut out = std::io::stdout();
+
   enable_raw_mode().unwrap();
 
   execute!(out, EnterAlternateScreen, EnableMouseCapture).unwrap();
@@ -174,7 +148,6 @@ fn main() {
 
   run(&mut terminal, & mut app);
 
-  thread::sleep(Duration::from_secs(3));
 
   disable_raw_mode().unwrap();
   execute!(
