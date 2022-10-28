@@ -1,7 +1,7 @@
 use std::io::BufReader;
 use std::{io, thread};
 use std::time::Duration;
-use app::{Project, AppTab};
+use term::project::{Project};
 use crossterm::execute;
 use crossterm::event::{EnableMouseCapture, DisableMouseCapture, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -12,7 +12,7 @@ use tui::{Frame, Terminal};
 use tui::text::Text;
 use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 use crate::app::App;
-use term::{ui, app};
+use term::{ui, app::{self, AppTab}};
 use std::io::BufRead;
 
 fn main() {
