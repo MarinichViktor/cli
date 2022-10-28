@@ -48,10 +48,10 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
             KeyCode::Char(ch) => {
               match ch {
                 'q' => {
-                  for project in app.projects.iter() {
-                    match &project.child {
+                  for project in app.projects.iter_mut(){
+                    match &mut project.child {
                       Some(ch) => {
-                        ch.lock().unwrap().kill().unwrap();
+                        ch.kill().unwrap();
                       }
                       _ => {}
                     }
