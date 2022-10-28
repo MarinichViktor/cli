@@ -1,6 +1,5 @@
 use tui::{
   Frame,
-  Terminal,
   backend::{Backend},
   widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
   style::{Style, Color},

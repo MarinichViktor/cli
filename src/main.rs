@@ -1,19 +1,12 @@
-use std::io::BufReader;
-use std::{io, thread};
+use std::{io};
 use std::time::Duration;
 use term::project::{Project};
 use crossterm::execute;
 use crossterm::event::{EnableMouseCapture, DisableMouseCapture, Event, KeyCode};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use tui::backend::{Backend, CrosstermBackend};
-use tui::layout::{Constraint, Direction, Layout};
-use tui::style::{Color, Style};
-use tui::{Frame, Terminal};
-use tui::text::Text;
-use tui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
-use crate::app::App;
-use term::{ui, app::{self, AppTab}};
-use std::io::BufRead;
+use tui::{Terminal};
+use term::{ui, app::{App, AppTab}};
 
 fn main() {
   let mut out = std::io::stdout();
@@ -32,7 +25,7 @@ fn main() {
   ];
   app.active_project = Some(0);
 
-  run(&mut terminal, & mut app);
+  run(&mut terminal, & mut app).unwrap();
 
   disable_raw_mode().unwrap();
   execute!(
@@ -99,10 +92,8 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
             _ => {}
           }
         },
-        Event::Resize(x, y) => {},
         _ => {}
       }
     }
   }
-  Ok(())
 }
