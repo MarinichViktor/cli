@@ -103,11 +103,27 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> io::Result<()> 
             KeyCode::Char(ch) => {
               match ch {
                   'q' => {
+                    for project in app.projects.iter() {
+                      match &project.child {
+                        Some(ch) => {
+                          ch.lock().unwrap().kill().unwrap();
+                        }
+                        _ => {}
+                      }
+                    }
+
                     return Ok(());
+                  },
+                  'r' => {
+                    let project = app.selected_project().unwrap();
+                    project.run().unwrap();
                   },
                   _ => {}
               }
             },
+            KeyCode::Tab => {
+              app.next_tab();
+            }
             KeyCode::Up => {
               match app.active_tab {
                 AppTab::Sidebar => {
@@ -167,7 +183,7 @@ fn main() {
   let mut terminal = Terminal::new(backend).unwrap();
   let mut  app = App::default();
   app.projects = vec![
-    Project::new("Core Api".to_string(), "bundle exec rails s -p 3030".to_string(), "/Users/vmaryn/telapp/tas".to_string()),
+    Project::new("Docker Core Api".to_string(), "docker-compose up".to_string(), "/home/vmaryn/projects/go/sandbox".to_string()),
     Project::new("Admin App".to_string(), "bundle exec rails s -p 3100".to_string(), "/Users/vmaryn/telapp/admin".to_string()),
   ];
   app.active_project = Some(0);

@@ -2,7 +2,9 @@ use std::str::FromStr;
 use std::{sync::Mutex, time::Instant, vec, process::Child, io};
 use std::result::{Result};
 use std::error::{Error};
+use std::io::{BufReader, Read, Stdin};
 use std::sync::Arc;
+use std::thread::JoinHandle;
 
 pub struct App {
   pub content: String,
@@ -64,6 +66,13 @@ impl App {
       self.active_project = Some(0);
     }
   }
+
+  pub fn next_tab(&mut self) {
+    self.active_tab = match self.active_tab {
+      AppTab::Console => AppTab::Sidebar,
+      AppTab::Sidebar => AppTab::Console
+    }
+  }
 }
 
 pub struct Project {
@@ -73,7 +82,8 @@ pub struct Project {
   pub output: Arc<Mutex<String>>,
   pub started_at: Option<Instant>,
   pub finished_at: Option<Instant>,
-  child: Option<Child>,
+  pub child: Option<Arc<Mutex<Child>>>,
+  pub join_handle: Option<JoinHandle<()>>
 }
 
 impl Project {
@@ -86,7 +96,8 @@ impl Project {
       output: Arc::new(Mutex::new(format!("{} -- {}", n, "Some interesting\n content".to_string()))),
       started_at: None,
       finished_at: None,
-      child: None
+      child: None,
+      join_handle: None
     }
   }
 
@@ -103,9 +114,27 @@ impl Project {
       .arg(self.executable.as_str())
       .current_dir(self.workdir.as_str())
       .stdout(Stdio::piped())
+      .stderr(Stdio::piped())
+      .stdin(Stdio::piped())
       .spawn()?;
 
+    let child = Arc::new(Mutex::new(child));
+    let mut thread_child = child.clone();
     self.child = Some(child);
+
+    let mut process_output = self.output.clone();
+
+    use std::io::BufRead;
+
+    let join_handle = std::thread::spawn(move || {
+      let stdout = thread_child.lock().unwrap().stdout.take().unwrap();
+      let mut reader = BufReader::new(stdout);
+
+      for line in reader.lines() {
+        process_output.lock().unwrap().push_str(line.unwrap().as_str());
+      }
+    });
+    self.join_handle = Some(join_handle);
 
     Ok(())
   }
