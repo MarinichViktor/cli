@@ -13,17 +13,6 @@ pub struct App {
   pub active_tab: AppTab,
 }
 
-impl Default for App {
-  fn default() -> Self {
-    App {
-      content: String::new(),
-      projects: vec![],
-      active_project: None,
-      active_tab: AppTab::Sidebar
-    }
-  }
-}
-
 impl App {
   pub fn lines(&mut self, width: u16) -> Vec<String> {
     match self.selected_project() {
@@ -71,6 +60,18 @@ impl App {
     self.active_tab = match self.active_tab {
       AppTab::Console => AppTab::Sidebar,
       AppTab::Sidebar => AppTab::Console
+    }
+  }
+}
+
+
+impl Default for App {
+  fn default() -> Self {
+    App {
+      content: String::new(),
+      projects: vec![],
+      active_project: None,
+      active_tab: AppTab::Sidebar
     }
   }
 }
