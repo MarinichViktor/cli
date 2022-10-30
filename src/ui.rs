@@ -62,7 +62,11 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
     block = block.border_style(Style::default().bg(Color::Green))
   }
 
-  let text = app.lines(block.inner(area).width).join("\n");
+  let calculated_lines = app.lines(block.inner(area).width);
+  // let mut text = app.lines(block.inner(area).width).join("\n");
+  let items = &calculated_lines[(calculated_lines.len().saturating_sub(area.height as usize)).max(0)..];
+  let text = items.join("\n");
+
   let paragraph = Paragraph::new(text)
     .block(block)
     .style(Style {

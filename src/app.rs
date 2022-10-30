@@ -1,18 +1,21 @@
 use std::{vec};
-use crate::project::{Project};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use crate::project::{Project, ProjectEvent};
 
 pub struct App {
   pub content: String,
   pub projects: Vec<Project>,
   pub active_project: Option<u8>,
   pub active_tab: AppTab,
+  pub receiver: Receiver::<ProjectEvent>,
+  pub sender: Sender::<ProjectEvent>,
 }
 
 impl App {
   pub fn lines(&mut self, width: u16) -> Vec<String> {
     match self.selected_project() {
       Some(p) => {
-          p.lines(width)
+        p.lines(width)
       }
       None => vec![String::from("Fallback text")]
     }
@@ -57,16 +60,37 @@ impl App {
       AppTab::Sidebar => AppTab::Console
     }
   }
+
+  pub fn on_tick(&mut self) {
+    let events = self.receiver.try_iter().collect::<Vec<ProjectEvent>>();
+    for event in events {
+      let project = self.projects.iter().find(|p| {
+        p.name == event.name
+      });
+
+      match project {
+        Some(p) => {
+          let mut out = p.output.lock().unwrap();
+          out.push_str(event.data.as_str());
+        },
+        _ => {}
+      }
+    }
+  }
 }
 
 
 impl Default for App {
   fn default() -> Self {
+    let (sender, receiver) = channel::<ProjectEvent>();
+
     App {
       content: String::new(),
       projects: vec![],
       active_project: None,
-      active_tab: AppTab::Sidebar
+      active_tab: AppTab::Sidebar,
+      sender,
+      receiver
     }
   }
 }

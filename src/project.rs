@@ -5,6 +5,9 @@ use std::io::{BufReader};
 use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::io::BufRead;
+use std::os::unix::io::RawFd;
+use std::sync::mpsc::Sender;
+use std::time::Duration;
 
 pub struct Project {
   pub name: String,
@@ -14,21 +17,22 @@ pub struct Project {
   pub started_at: Option<Instant>,
   pub finished_at: Option<Instant>,
   pub child: Option<Child>,
-  pub join_handle: Option<JoinHandle<()>>
+  pub join_handle: Option<JoinHandle<()>>,
+  output_notifier: Sender::<ProjectEvent>
 }
 
 impl Project {
-  pub fn new(name: String, executable: String, workdir: String) -> Self {
-    let n = name.clone();
+  pub fn new(name: String, executable: String, workdir: String, output_notifier: Sender::<ProjectEvent>) -> Self {
     Project {
       name,
       executable,
       workdir,
-      output: Arc::new(Mutex::new(format!("{} -- {}", n, "Some interesting\n content".to_string()))),
+      output_notifier,
+      output: Arc::new(Mutex::new("".to_string())),
       started_at: None,
       finished_at: None,
       child: None,
-      join_handle: None
+      join_handle: None,
     }
   }
 
@@ -46,23 +50,35 @@ impl Project {
       .current_dir(self.workdir.as_str())
       .stdout(Stdio::piped())
       .stderr(Stdio::piped())
-      .stdin(Stdio::piped())
       .spawn()?;
 
 
-    let process_data = self.output.clone();
     let stdout = child.stdout.take().unwrap();
-    self.child = Some(child);
+    let on_data = self.output_notifier.clone();
+    let event_name = self.name.clone();
 
-    let join_handle = std::thread::spawn(move || {
+    std::thread::spawn(move || {
       let reader = BufReader::new(stdout);
 
       for line in reader.lines() {
-        process_data.lock().unwrap().push_str(line.unwrap().as_str());
+        let formatted_line = format!("{}\n", line.unwrap());
+        on_data.send(ProjectEvent::new(event_name.clone(), formatted_line)).unwrap();
       }
     });
 
-    self.join_handle = Some(join_handle);
+    let stderr = child.stderr.take().unwrap();
+    let on_err = self.output_notifier.clone();
+    let event_name = self.name.clone();
+
+    std::thread::spawn(move || {
+      let reader = BufReader::new(stderr);
+      for line in reader.lines() {
+        let formatted_line = format!("{}\n", line.unwrap());
+        on_err.send(ProjectEvent::new(event_name.clone(), formatted_line)).unwrap();
+      }
+    });
+
+    self.child = Some(child);
 
     Ok(())
   }
@@ -89,5 +105,20 @@ impl Project {
       })
       .map(str::to_owned)
       .collect()
+  }
+}
+
+
+pub struct ProjectEvent {
+  pub name: String,
+  pub data: String
+}
+
+impl ProjectEvent {
+  pub fn new(name: String, data: String) -> Self {
+    ProjectEvent {
+      name,
+      data
+    }
   }
 }
