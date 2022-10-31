@@ -1,14 +1,14 @@
 use std::{vec};
-use std::sync::mpsc::{channel, Receiver, Sender};
-use crate::project::{Project, ProjectEvent};
+use crossterm::event::{KeyCode, KeyEvent};
+use crate::project::{Project};
+use crate::result::{Result};
 
 pub struct App {
   pub content: String,
   pub projects: Vec<Project>,
   pub active_project: Option<u8>,
   pub active_tab: AppTab,
-  pub receiver: Receiver::<ProjectEvent>,
-  pub sender: Sender::<ProjectEvent>,
+  pub should_exit: bool
 }
 
 impl App {
@@ -62,35 +62,56 @@ impl App {
   }
 
   pub fn on_tick(&mut self) {
-    let events = self.receiver.try_iter().collect::<Vec<ProjectEvent>>();
-    for event in events {
-      let project = self.projects.iter().find(|p| {
-        p.name == event.name
-      });
+  }
 
-      match project {
-        Some(p) => {
-          let mut out = p.output.lock().unwrap();
-          out.push_str(event.data.as_str());
-        },
+  pub fn on_key(&mut self, key_event: KeyEvent) -> Result<()> {
+    match key_event.code {
+      KeyCode::Char(ch) => {
+        match ch {
+          'q' => {
+            for project in self.projects.iter_mut() {
+              match &mut project.child {
+                Some(ch) => {
+                  match ch.try_wait() {
+                    Ok(Some(_)) => {},
+                    _ => { ch.kill()? },
+                  }
+                },
+                _ => {}
+              }
+            }
+
+            self.should_exit = true;
+          },
+          'r' => self.selected_project().unwrap().run()?,
+          's' => { self.selected_project().unwrap().stop()?; }
+          _ => {}
+        }
+      },
+      KeyCode::Tab => self.next_tab(),
+      KeyCode::Up => match self.active_tab {
+        AppTab::Sidebar => self.select_prev(),
         _ => {}
-      }
-    }
+      },
+      KeyCode::Down => match self.active_tab {
+        AppTab::Sidebar => self.select_next(),
+        _ => {}
+      },
+      _ => {}
+    };
+    Ok(())
   }
 }
 
 
 impl Default for App {
   fn default() -> Self {
-    let (sender, receiver) = channel::<ProjectEvent>();
-
     App {
-      content: String::new(),
       projects: vec![],
+      content: String::new(),
       active_project: None,
       active_tab: AppTab::Sidebar,
-      sender,
-      receiver
+      should_exit: false
     }
   }
 }
