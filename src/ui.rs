@@ -22,7 +22,14 @@ pub fn render_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
 
 fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   let items = app.projects.iter()
-    .map(|p| ListItem::new(p.name.as_str()))
+    .map(|p| {
+      let style = if p.status.lock().unwrap().is_running {
+        Style::default().fg(Color::Green)
+      } else {
+        Style::default()
+      };
+      ListItem::new(p.name.as_str()).style(style)
+    })
     .collect::<Vec<ListItem>>();
 
   let mut block = Block::default()

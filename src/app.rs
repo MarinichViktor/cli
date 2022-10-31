@@ -91,11 +91,15 @@ impl App {
       KeyCode::Tab => self.next_tab(),
       KeyCode::Up => match self.active_tab {
         AppTab::Sidebar => self.select_prev(),
-        _ => {}
+        AppTab::Console => {
+
+        }
       },
       KeyCode::Down => match self.active_tab {
         AppTab::Sidebar => self.select_next(),
-        _ => {}
+        AppTab::Console => {
+
+        }
       },
       _ => {}
     };
