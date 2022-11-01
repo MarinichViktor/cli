@@ -65,6 +65,8 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
   }
 
   let text_area = block.inner(area);
+  app.console_widget_size = text_area;
+
   let calculated_lines = app.lines(text_area.width);
   let items = if !calculated_lines.is_empty() {
     let mut offset = app.selected_project().offset.lock().unwrap();

@@ -1,5 +1,6 @@
 use std::{vec};
 use crossterm::event::{KeyCode, KeyEvent};
+use tui::layout::Rect;
 use crate::project::{Project};
 use crate::result::{Result};
 
@@ -9,6 +10,7 @@ pub struct App {
   pub selected_project_index: u8,
   pub active_tab: AppTab,
   pub should_exit: bool,
+  pub console_widget_size: Rect
 }
 
 impl App {
@@ -77,6 +79,7 @@ impl App {
       KeyCode::Down => match self.active_tab {
         AppTab::Sidebar => self.select_next(),
         AppTab::Console => {
+          // todo: to be refactored
           let curr_offset = *self.selected_project().offset.lock().unwrap();
           *self.selected_project().offset.lock().unwrap() = if curr_offset > 0 {
             curr_offset - 1
@@ -85,6 +88,20 @@ impl App {
           };
         }
       },
+      KeyCode::PageDown => {
+        if let AppTab::Console = self.active_tab {
+            let x = self.console_widget_size;
+            let mut curr_offset = self.selected_project().offset.lock().unwrap();
+            *curr_offset = (*curr_offset - x.height as i32).max(0);
+        }
+      },
+      KeyCode::PageUp => {
+        if let AppTab::Console = self.active_tab {
+          let x = self.console_widget_size;
+        let mut curr_offset = self.selected_project().offset.lock().unwrap();
+        *curr_offset += x.height as i32;
+        }
+      }
       _ => {}
     };
     Ok(())
@@ -98,7 +115,8 @@ impl Default for App {
       content: String::new(),
       selected_project_index: 0,
       active_tab: AppTab::Sidebar,
-      should_exit: false
+      should_exit: false,
+      console_widget_size: Rect::default()
     }
   }
 }
