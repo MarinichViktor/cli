@@ -22,13 +22,13 @@ pub fn render_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
 
 fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   let items = app.projects.iter()
-    .map(|p| {
-      let style = if p.status.lock().unwrap().is_running {
+    .map(|project| {
+      let style = if project.status.lock().unwrap().is_running {
         Style::default().fg(Color::Green)
       } else {
         Style::default()
       };
-      ListItem::new(p.name.as_str()).style(style)
+      ListItem::new(project.name.as_str()).style(style)
     })
     .collect::<Vec<ListItem>>();
 
@@ -42,15 +42,10 @@ fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
 
   let sidebar = List::new(items)
     .block(block)
-    .highlight_style(Style {
-      fg: Some(Color::Blue),
-      ..Style::default()
-    });
+    .highlight_style(Style::default().fg(Color::Blue));
 
   let mut state = ListState::default();
-  if let Some(i) = app.active_project {
-    state.select(Some(i as usize));
-  }
+  state.select(Some(app.selected_project_index as usize));
 
   frame.render_stateful_widget(sidebar, area, &mut state);
 }
@@ -69,17 +64,28 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
     block = block.border_style(Style::default().bg(Color::Green))
   }
 
-  let calculated_lines = app.lines(block.inner(area).width);
+  let text_area = block.inner(area);
+  let calculated_lines = app.lines(text_area.width);
+  let items = if !calculated_lines.is_empty() {
+    let mut offset = app.selected_project().offset.lock().unwrap();
+    let line_start_index = (calculated_lines.len().saturating_sub(text_area.height as usize) as i32 - *offset).max(0) as usize;
+    if calculated_lines.len() > text_area.height as usize  && *offset > calculated_lines.len() as i32 - text_area.height as i32 {
+      *offset = calculated_lines.len() as i32 - text_area.height as i32;
+    }
+
+    let line_end_index = (line_start_index + text_area.height as usize).min(calculated_lines.len() - 1);
+    &calculated_lines[line_start_index..=line_end_index]
+  } else {
+    &calculated_lines[..]
+  };
+  // let calculated_lines = app.lines(text_area.width);
   // let mut text = app.lines(block.inner(area).width).join("\n");
-  let items = &calculated_lines[(calculated_lines.len().saturating_sub(area.height as usize)).max(0)..];
+  // let items = &calculated_lines[(calculated_lines.len().saturating_sub(text_area.height as usize)).max(0)..];
   let text = items.join("\n");
 
   let paragraph = Paragraph::new(text)
     .block(block)
-    .style(Style {
-      fg: Some(Color::Black),
-      ..Style::default()
-    })
+    .style(Style::default().fg(Color::Black))
     .wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);

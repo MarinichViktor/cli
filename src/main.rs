@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 use term::project::{Project};
 use crossterm::execute;
-use crossterm::event::{EnableMouseCapture, DisableMouseCapture, Event};
+use crossterm::event::{Event};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
 use tui::backend::{Backend, CrosstermBackend};
 use tui::{Terminal};
@@ -11,10 +11,11 @@ fn main() -> Result<()> {
   let mut out = std::io::stdout();
 
   enable_raw_mode()?;
+  execute!(out, EnterAlternateScreen)?;
 
-  execute!(out, EnterAlternateScreen, EnableMouseCapture)?;
   let backend = CrosstermBackend::new(out);
   let mut terminal = Terminal::new(backend)?;
+  terminal.hide_cursor()?;
   let mut app = App::default();
 
   app.projects = vec![
@@ -22,12 +23,12 @@ fn main() -> Result<()> {
     Project::new("Angular app".to_string(), "ng serve".to_string(), "/home/vmaryn/projects/dotnet/echat/src/WebSpa".to_string()),
     Project::new("Admin App".to_string(), "bundle exec rails s -p 3100".to_string(), "/Users/vmaryn/telapp/admin".to_string()),
   ];
-  app.active_project = Some(0);
 
   run(&mut terminal, & mut app)?;
 
   disable_raw_mode()?;
-  execute!(terminal.backend_mut(), LeaveAlternateScreen, DisableMouseCapture)?;
+  execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+  terminal.show_cursor()?;
 
   Ok(())
 }

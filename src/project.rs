@@ -15,7 +15,7 @@ pub struct Project {
   pub workdir: String,
   pub output: Arc<Mutex<String>>,
   pub child: Option<Child>,
-  pub offset: Mutex<u32>,
+  pub offset: Mutex<i32>,
   pub status: Arc<Mutex<ProcessStatus>>,
 }
 

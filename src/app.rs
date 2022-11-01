@@ -6,28 +6,18 @@ use crate::result::{Result};
 pub struct App {
   pub content: String,
   pub projects: Vec<Project>,
-  pub active_project: Option<u8>,
+  pub selected_project_index: u8,
   pub active_tab: AppTab,
-  pub should_exit: bool
+  pub should_exit: bool,
 }
 
 impl App {
   pub fn lines(&mut self, width: u16) -> Vec<String> {
-    match self.selected_project() {
-      Some(p) => {
-        p.lines(width)
-      }
-      None => vec![String::from("Fallback text")]
-    }
+    self.selected_project().lines(width)
   }
 
-  pub fn selected_project<'a>(&'a mut self) -> Option<&'a mut Project> {
-    match self.active_project {
-      Some(idx) => {
-        Some(&mut self.projects[idx as usize])
-      }
-      None => None
-    }
+  pub fn selected_project<'a>(&'a mut self) -> &'a mut Project {
+    &mut self.projects[self.selected_project_index as usize]
   }
 
   pub fn select_next(&mut self) {
@@ -35,11 +25,7 @@ impl App {
       return;
     }
 
-    if let Some(index) = self.active_project {
-        self.active_project = Some((index + 1).min((self.projects.len() - 1) as u8));
-    } else {
-      self.active_project = Some(0);
-    }
+    self.selected_project_index = ( self.selected_project_index + 1).min((self.projects.len() - 1) as u8);
   }
 
   pub fn select_prev(&mut self) {
@@ -47,11 +33,7 @@ impl App {
       return;
     }
 
-    if let Some(index) = self.active_project {
-        self.active_project = Some(((index as i8) - 1).max(0) as u8);
-    } else {
-      self.active_project = Some(0);
-    }
+    self.selected_project_index = ((self.selected_project_index  as i8) - 1).max(0) as u8;
   }
 
   pub fn next_tab(&mut self) {
@@ -70,21 +52,18 @@ impl App {
         match ch {
           'q' => {
             for project in self.projects.iter_mut() {
-              match &mut project.child {
-                Some(ch) => {
-                  match ch.try_wait() {
-                    Ok(Some(_)) => {},
-                    _ => { ch.kill()? },
-                  }
-                },
-                _ => {}
+              if let Some(ch) = &mut project.child {
+                match ch.try_wait() {
+                  Ok(Some(_)) => {},
+                  _ => ch.kill()?,
+                }
               }
             }
 
             self.should_exit = true;
           },
-          'r' => self.selected_project().unwrap().run()?,
-          's' => { self.selected_project().unwrap().stop()?; }
+          'r' => self.selected_project().run()?,
+          's' => { self.selected_project().stop()?; }
           _ => {}
         }
       },
@@ -92,13 +71,18 @@ impl App {
       KeyCode::Up => match self.active_tab {
         AppTab::Sidebar => self.select_prev(),
         AppTab::Console => {
-
+          *self.selected_project().offset.lock().unwrap() += 1;
         }
       },
       KeyCode::Down => match self.active_tab {
         AppTab::Sidebar => self.select_next(),
         AppTab::Console => {
-
+          let curr_offset = *self.selected_project().offset.lock().unwrap();
+          *self.selected_project().offset.lock().unwrap() = if curr_offset > 0 {
+            curr_offset - 1
+          } else {
+            0
+          };
         }
       },
       _ => {}
@@ -107,13 +91,12 @@ impl App {
   }
 }
 
-
 impl Default for App {
   fn default() -> Self {
     App {
       projects: vec![],
       content: String::new(),
-      active_project: None,
+      selected_project_index: 0,
       active_tab: AppTab::Sidebar,
       should_exit: false
     }
