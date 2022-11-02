@@ -3,6 +3,7 @@ use crate::result::{Result, bail};
 use std::io::{BufReader};
 use std::sync::Arc;
 use std::io::BufRead;
+use std::os::linux::raw::stat;
 use std::sync::mpsc::{channel};
 use std::time::Duration;
 use std::process::{Command, Stdio};
@@ -86,6 +87,9 @@ impl Project {
     let (sender, receiver) = channel();
     let stdout_sender = sender.clone();
 
+    // todo: to be refactored
+    let project_status = self.status.clone();
+    let project_output = self.output.clone();
     // TODO: push data into temp vector and update it each n seconds
     std::thread::spawn(move || {
       let reader = BufReader::new(stdout);
@@ -93,6 +97,11 @@ impl Project {
       for line in reader.lines() {
         stdout_sender.send(line.unwrap()).unwrap();
       }
+
+      let mut status = project_status.lock().unwrap();
+      status.started_at = None;
+      status.is_running = false;
+      *project_output.lock().unwrap() = "".to_string();
     });
 
     let stderr_sender = sender.clone();
@@ -125,30 +134,6 @@ impl Project {
 
     Ok(())
   }
-
-  // pub fn lines(&mut self, width: u16) -> Vec<String> {
-  //   self.output.lock()
-  //     .unwrap()
-  //     .lines()
-  //     .flat_map(|line| {
-  //       let mut curr = line;
-  //       let mut sub_lines = vec![];
-  //
-  //       while curr.len() > width as usize {
-  //           let (a,b) = curr.split_at(width as usize);
-  //           sub_lines.push(a);
-  //           curr = b;
-  //       }
-  //
-  //       if !curr.is_empty() {
-  //           sub_lines.push(curr);
-  //       }
-  //
-  //       sub_lines
-  //     })
-  //     .map(str::to_owned)
-  //     .collect()
-  // }
 
   pub fn lines(&mut self, width: u16) -> Vec<String> {
     self.output.lock()
