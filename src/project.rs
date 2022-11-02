@@ -3,7 +3,6 @@ use crate::result::{Result, bail};
 use std::io::{BufReader};
 use std::sync::Arc;
 use std::io::BufRead;
-use std::os::linux::raw::stat;
 use std::sync::mpsc::{channel};
 use std::time::Duration;
 use std::process::{Command, Stdio};

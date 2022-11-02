@@ -1,5 +1,3 @@
-use std::fmt::format;
-use std::io::{BufWriter, Write};
 use tui::{
   Frame,
   backend::{Backend},
