@@ -44,9 +44,8 @@ fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> Result<()> {
       .unwrap_or(Duration::from_secs(0));
 
     if crossterm::event::poll(poll_timeout)? {
-      match crossterm::event::read()? {
-        Event::Key(evt) => app.on_key(evt)?,
-        _ => {}
+      if let Event::Key(evt) = crossterm::event::read()? {
+        app.on_key(evt)?;
       }
     }
 

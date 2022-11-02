@@ -16,7 +16,7 @@ pub struct Project {
   pub workdir: String,
   pub output: Arc<Mutex<Vec<String>>>,
   pub child: Option<Child>,
-  pub offset: Mutex<i32>,
+  pub offset: Arc<Mutex<i32>>,
   pub status: Arc<Mutex<ProcessStatus>>,
 }
 
@@ -33,7 +33,7 @@ impl Project {
       workdir,
       output: Arc::new(Mutex::new(vec![])),
       child: None,
-      offset: Mutex::new(0),
+      offset: Arc::new(Mutex::new(0)),
       status: Arc::new(
         Mutex::new(
           ProcessStatus {
@@ -114,6 +114,7 @@ impl Project {
     });
 
     let out = self.output.clone();
+    let offset = self.offset.clone();
     std::thread::spawn(move || {
       loop {
         let mut buff = vec![];
