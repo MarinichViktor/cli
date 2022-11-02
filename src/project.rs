@@ -126,27 +126,43 @@ impl Project {
     Ok(())
   }
 
+  // pub fn lines(&mut self, width: u16) -> Vec<String> {
+  //   self.output.lock()
+  //     .unwrap()
+  //     .lines()
+  //     .flat_map(|line| {
+  //       let mut curr = line;
+  //       let mut sub_lines = vec![];
+  //
+  //       while curr.len() > width as usize {
+  //           let (a,b) = curr.split_at(width as usize);
+  //           sub_lines.push(a);
+  //           curr = b;
+  //       }
+  //
+  //       if !curr.is_empty() {
+  //           sub_lines.push(curr);
+  //       }
+  //
+  //       sub_lines
+  //     })
+  //     .map(str::to_owned)
+  //     .collect()
+  // }
+
   pub fn lines(&mut self, width: u16) -> Vec<String> {
     self.output.lock()
       .unwrap()
       .lines()
       .flat_map(|line| {
-        let mut curr = line;
-        let mut sub_lines = vec![];
-
-        while curr.len() > width as usize {
-            let (a,b) = curr.split_at(width as usize);
-            sub_lines.push(a);
-            curr = b;
-        }
-
-        if !curr.is_empty() {
-            sub_lines.push(curr);
-        }
-
-        sub_lines
+        let chars: Vec<char> = line.chars().collect();
+        chars.chunks(width as usize)
+          .map(|ch| {
+            ch.into_iter().collect::<String>()
+          })
+          .collect::<Vec<String>>()
       })
-      .map(str::to_owned)
+      // .map(str::to_owned)
       .collect()
   }
 }
