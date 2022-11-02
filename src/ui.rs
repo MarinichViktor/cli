@@ -1,4 +1,5 @@
 use std::fmt::format;
+use std::io::{BufWriter, Write};
 use tui::{
   Frame,
   backend::{Backend},
@@ -77,7 +78,7 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
     if calculated_lines.len() > text_area.height as usize  && *offset > calculated_lines.len() as i32 - text_area.height as i32 {
       *offset = calculated_lines.len() as i32 - text_area.height as i32;
     }
-
+    drop(offset);
     let line_end_index = (line_start_index + text_area.height as usize).min(calculated_lines.len() - 1);
     if line_start_index != line_end_index {
       block = block.title(format!("Console ({}-{} of {})", line_start_index+ 1, line_end_index + 1, calculated_lines.len()));

@@ -15,7 +15,7 @@ pub struct Project {
   pub name: String,
   pub executable: String,
   pub workdir: String,
-  pub output: Arc<Mutex<String>>,
+  pub output: Arc<Mutex<Vec<String>>>,
   pub child: Option<Child>,
   pub offset: Mutex<i32>,
   pub status: Arc<Mutex<ProcessStatus>>,
@@ -32,7 +32,7 @@ impl Project {
       name,
       executable,
       workdir,
-      output: Arc::new(Mutex::new("".to_string())),
+      output: Arc::new(Mutex::new(vec![])),
       child: None,
       offset: Mutex::new(0),
       status: Arc::new(
@@ -102,7 +102,7 @@ impl Project {
       let mut status = project_status.lock().unwrap();
       status.started_at = None;
       status.is_running = false;
-      *project_output.lock().unwrap() = "".to_string();
+      project_output.lock().unwrap().clear();
     });
 
     let stderr_sender = sender.clone();
@@ -123,8 +123,15 @@ impl Project {
           buff.push(line);
         }
 
+        // todo: store output in lines instead of string
         if !buff.is_empty() {
-          out.lock().unwrap().push_str(buff.join("\n").as_str());
+          let mut data = out.lock().unwrap();
+          data.append(&mut buff);
+
+          if data.len() > 10_000 {
+            let (_, remain) = data.split_at(data.len() - 5_000);
+            *data = remain.to_vec();
+          }
         }
 
         std::thread::sleep(Duration::from_millis(PROCESS_DELAY));
@@ -139,9 +146,12 @@ impl Project {
   pub fn lines(&mut self, width: u16) -> Vec<String> {
     self.output.lock()
       .unwrap()
-      .lines()
+      .iter()
       .flat_map(|line| {
-        let chars: Vec<char> = line.chars().collect();
+        let mut chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+          chars.push('\n');
+        }
         chars.chunks(width as usize)
           .map(|ch| {
             ch.into_iter().collect::<String>()
