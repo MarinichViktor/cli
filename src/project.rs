@@ -10,6 +10,7 @@ use std::process::{Command, Stdio};
 
 static PROCESS_DELAY: u64 = 200;
 
+// todo: to be refactored
 pub struct Project {
   pub name: String,
   pub executable: String,

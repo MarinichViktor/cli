@@ -1,3 +1,4 @@
+use std::fmt::format;
 use tui::{
   Frame,
   backend::{Backend},
@@ -50,6 +51,7 @@ fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   frame.render_stateful_widget(sidebar, area, &mut state);
 }
 
+// todo: review colors
 fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) {
   let mut block = Block::default()
     .style(
@@ -57,7 +59,7 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
         .bg(Color::White)
         .fg(Color::Black)
     )
-    .title("Processes")
+    .title("Console")
     .borders(Borders::ALL);
 
   if let AppTab::Console = app.active_tab {
@@ -67,6 +69,7 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
   let text_area = block.inner(area);
   app.console_widget_size = text_area;
 
+  // todo: to be refactored
   let calculated_lines = app.lines(text_area.width);
   let items = if !calculated_lines.is_empty() {
     let mut offset = app.selected_project().offset.lock().unwrap();
@@ -76,6 +79,9 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
     }
 
     let line_end_index = (line_start_index + text_area.height as usize).min(calculated_lines.len() - 1);
+    if line_start_index != line_end_index {
+      block = block.title(format!("Console ({}-{} of {})", line_start_index+ 1, line_end_index + 1, calculated_lines.len()));
+    }
     &calculated_lines[line_start_index..=line_end_index]
   } else {
     &calculated_lines[..]
