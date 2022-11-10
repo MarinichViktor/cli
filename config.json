@@ -1,0 +1,12 @@
+[
+  {
+    "name": "Docker core Api",
+    "executable": "docker-compose up",
+    "workdir": "/home/vmaryn/projects/go/sandbox"
+  },
+  {
+    "name": "Angular api",
+    "executable": "ng serve",
+    "workdir": "/home/vmaryn/projects/dotnet/echat/src/WebSpa"
+  }
+]

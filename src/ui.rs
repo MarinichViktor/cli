@@ -1,3 +1,4 @@
+use std::time::{Instant, SystemTime};
 use tui::{
   Frame,
   backend::{Backend},
@@ -6,6 +7,24 @@ use tui::{
   layout::{Constraint, Direction, Layout, Rect},
 };
 use crate::app::{App, AppTab};
+
+static SIDEBAR_ITEM_TEXT_ACTIVE_COLOR: Color = Color::Rgb(198, 198, 102);
+static SIDEBAR_ITEM_TEXT_COLOR: Color = Color::DarkGray;
+// static SIDEBAR_ITEM_BACKGROUND: Color = Color::DarkGray;
+static SIDEBAR_ITEM_ACTIVE_BACKGROUND: Color = Color::Rgb(45, 44, 46);
+static SIDEBAR_BACKGROUND_COLOR: Color = Color::Rgb(148, 111, 166);
+static SIDEBAR_ACTIVE_BACKGROUND_COLOR: Color = Color::Rgb(148, 111, 166);
+static SIDEBAR_BORDER_COLOR: Color = Color::DarkGray;
+static SIDEBAR_ACTIVE_BORDER_COLOR: Color = Color::White;
+
+static CONSOLE_BACKGROUND_COLOR: Color = Color::Rgb(92, 138, 138);
+static CONSOLE_ACTIVE_BACKGROUND_COLOR: Color = Color::Rgb(92, 138, 138);
+static CONSOLE_BORDER_COLOR: Color = Color::DarkGray;
+static CONSOLE_ACTIVE_BORDER_COLOR: Color = Color::White;
+
+static CONSOLE_TEXT_COLOR: Color = Color::White;
+static CONSOLE_ACTIVE_TEXT_COLOR: Color = Color::White;
+
 
 pub fn render_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
   let chunks = Layout::default()
@@ -23,26 +42,45 @@ pub fn render_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
 fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   let items = app.projects.iter()
     .map(|project| {
-      let style = if project.status.lock().unwrap().is_running {
-        Style::default().fg(Color::Green)
-      } else {
-        Style::default()
-      };
-      ListItem::new(project.name.as_str()).style(style)
+      let mut name = project.name.clone();
+      if project.status.lock().unwrap().is_running {
+        name = format!("{} ◕", name);
+      }
+      ListItem::new(name)
+          .style(
+            Style::default().fg(SIDEBAR_ITEM_TEXT_COLOR)
+          )
     })
     .collect::<Vec<ListItem>>();
 
   let mut block = Block::default()
     .borders(Borders::ALL)
+    .border_style(Style::default().fg(SIDEBAR_BORDER_COLOR))
     .title("Projects");
 
   if let AppTab::Sidebar = app.active_tab {
-    block = block.border_style(Style::default().bg(Color::Green))
+    block = block.border_style(
+      Style::default().fg(SIDEBAR_ACTIVE_BORDER_COLOR)
+    );
   }
 
-  let sidebar = List::new(items)
+  let mut sidebar = List::new(items)
     .block(block)
-    .highlight_style(Style::default().fg(Color::Blue));
+    .highlight_style(
+      Style::default()
+          .fg(SIDEBAR_ITEM_TEXT_ACTIVE_COLOR)
+          .bg(SIDEBAR_ITEM_ACTIVE_BACKGROUND)
+    ).style(
+      Style::default().bg(SIDEBAR_BACKGROUND_COLOR)
+    );
+
+  if let AppTab::Sidebar = app.active_tab {
+    sidebar = sidebar.style(
+      Style::default()
+          .bg(SIDEBAR_ACTIVE_BACKGROUND_COLOR)
+          .fg(SIDEBAR_ACTIVE_BORDER_COLOR)
+    );
+  }
 
   let mut state = ListState::default();
   state.select(Some(app.selected_project_index as usize));
@@ -50,19 +88,25 @@ fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   frame.render_stateful_widget(sidebar, area, &mut state);
 }
 
+
 // todo: review colors
 fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) {
   let mut block = Block::default()
     .style(
       Style::default()
-        .bg(Color::White)
-        .fg(Color::Black)
+        .fg(CONSOLE_BORDER_COLOR)
     )
     .title("Console")
     .borders(Borders::ALL);
 
+  let mut paragraph_style = Style::default()
+      .fg(CONSOLE_TEXT_COLOR)
+      .bg(CONSOLE_BACKGROUND_COLOR);
+
   if let AppTab::Console = app.active_tab {
-    block = block.border_style(Style::default().bg(Color::Green))
+    block = block.border_style(Style::default().fg(CONSOLE_ACTIVE_BORDER_COLOR));
+    paragraph_style = paragraph_style.bg(CONSOLE_ACTIVE_BACKGROUND_COLOR)
+        .fg(CONSOLE_ACTIVE_TEXT_COLOR);
   }
 
   let text_area = block.inner(area);
@@ -92,7 +136,9 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
 
   let paragraph = Paragraph::new(text)
     .block(block)
-    .style(Style::default().fg(Color::Black))
+    .style(
+      paragraph_style
+    )
     .wrap(Wrap { trim: false });
 
   frame.render_widget(paragraph, area);

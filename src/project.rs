@@ -6,8 +6,15 @@ use std::io::BufRead;
 use std::sync::mpsc::{channel};
 use std::time::Duration;
 use std::process::{Command, Stdio};
-
+use serde::{Deserialize, Serialize};
 static PROCESS_DELAY: u64 = 200;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ProjectDescriptor {
+  pub name: String,
+  pub executable: String,
+  pub workdir: String,
+}
 
 // todo: to be refactored
 pub struct Project {
@@ -18,6 +25,12 @@ pub struct Project {
   pub child: Option<Child>,
   pub offset: Arc<Mutex<i32>>,
   pub status: Arc<Mutex<ProcessStatus>>,
+}
+
+impl From<ProjectDescriptor> for Project {
+  fn from(descriptor: ProjectDescriptor) -> Self {
+    Project::new(descriptor.name, descriptor.executable, descriptor.workdir)
+  }
 }
 
 pub struct ProcessStatus {
@@ -68,7 +81,7 @@ impl Project {
     let mut status = self.status.lock().unwrap();
 
     if status.is_running {
-      bail!("Project already running");
+      return Ok(());
     }
 
     status.is_running = true;

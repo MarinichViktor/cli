@@ -1,5 +1,6 @@
+use std::process::exit;
 use std::time::{Duration, Instant};
-use term::project::{Project};
+use term::project::{Project, ProjectDescriptor};
 use crossterm::execute;
 use crossterm::event::{Event};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -9,6 +10,16 @@ use term::{ui, app::{App}, result::Result};
 
 fn main() -> Result<()> {
   let mut out = std::io::stdout();
+  let args = std::env::args().skip(1).collect::<Vec<String>>();
+
+  if args.is_empty() {
+    println!("Provide configuration file path");
+    exit(0);
+  }
+
+  let data = std::fs::read_to_string(args[0].as_str()).unwrap();
+  let projects: Vec<ProjectDescriptor> = serde_json::from_str(data.as_str())?;
+
 
   enable_raw_mode()?;
   execute!(out, EnterAlternateScreen)?;
@@ -18,11 +29,7 @@ fn main() -> Result<()> {
   terminal.hide_cursor()?;
   let mut app = App::default();
 
-  app.projects = vec![
-    Project::new("Docker Core Api".to_string(), "docker-compose up".to_string(), "/home/vmaryn/projects/go/sandbox".to_string()),
-    Project::new("Angular app".to_string(), "ng serve".to_string(), "/home/vmaryn/projects/dotnet/echat/src/WebSpa".to_string()),
-    Project::new("Admin App".to_string(), "bundle exec rails s -p 3100".to_string(), "/Users/vmaryn/telapp/admin".to_string()),
-  ];
+  app.projects = projects.into_iter().map(|descriptor| descriptor.into()).collect();
 
   run(&mut terminal, & mut app)?;
 
