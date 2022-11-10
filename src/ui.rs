@@ -88,7 +88,6 @@ fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   frame.render_stateful_widget(sidebar, area, &mut state);
 }
 
-
 // todo: review colors
 fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) {
   let mut block = Block::default()

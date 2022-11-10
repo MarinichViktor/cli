@@ -9,7 +9,6 @@ use tui::{Terminal};
 use term::{ui, app::{App}, result::Result};
 
 fn main() -> Result<()> {
-  let mut out = std::io::stdout();
   let args = std::env::args().skip(1).collect::<Vec<String>>();
 
   if args.is_empty() {
@@ -20,6 +19,19 @@ fn main() -> Result<()> {
   let data = std::fs::read_to_string(args[0].as_str()).unwrap();
   let projects: Vec<ProjectDescriptor> = serde_json::from_str(data.as_str())?;
 
+  run(projects)?;
+
+  Ok(())
+}
+
+fn run(projects: Vec<ProjectDescriptor>) -> Result<()> {
+  let mut out = std::io::stdout();
+  let mut app = App {
+    projects: projects.into_iter()
+        .map(|descriptor| descriptor.into())
+        .collect(),
+    ..Default::default()
+  };
 
   enable_raw_mode()?;
   execute!(out, EnterAlternateScreen)?;
@@ -27,11 +39,8 @@ fn main() -> Result<()> {
   let backend = CrosstermBackend::new(out);
   let mut terminal = Terminal::new(backend)?;
   terminal.hide_cursor()?;
-  let mut app = App::default();
 
-  app.projects = projects.into_iter().map(|descriptor| descriptor.into()).collect();
-
-  run(&mut terminal, & mut app)?;
+  listen(&mut terminal, & mut app)?;
 
   disable_raw_mode()?;
   execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
@@ -40,7 +49,7 @@ fn main() -> Result<()> {
   Ok(())
 }
 
-fn run<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> Result<()> {
+fn listen<T: Backend>(terminal: &mut Terminal<T>, app: &mut App) -> Result<()> {
   let tick_interval = Duration::from_millis(100);
   let mut last_tick = Instant::now();
 
