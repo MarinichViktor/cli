@@ -19,7 +19,9 @@ fn main() -> Result<()> {
   let data = std::fs::read_to_string(args[0].as_str()).unwrap();
   let projects: Vec<ProjectDescriptor> = serde_json::from_str(data.as_str())?;
 
-  run(projects)?;
+  if let Err(e) = run(projects) {
+    println!("Exited with error: {}", e);
+  }
 
   Ok(())
 }
@@ -40,7 +42,13 @@ fn run(projects: Vec<ProjectDescriptor>) -> Result<()> {
   let mut terminal = Terminal::new(backend)?;
   terminal.hide_cursor()?;
 
-  listen(&mut terminal, & mut app)?;
+  if let Err(e) = listen(&mut terminal, & mut app) {
+    for mut p in app.projects {
+      let _ = p.stop();
+    }
+
+    return Err(e);
+  }
 
   disable_raw_mode()?;
   execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
