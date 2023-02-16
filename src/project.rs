@@ -175,3 +175,103 @@ impl Project {
       .collect()
   }
 }
+
+pub struct OutputBuffer {
+  raw_output: Vec<OutputBlock>,
+  pub offset: (usize,i32),
+}
+
+impl OutputBuffer {
+  pub fn append(&mut self,  mut buff: Vec<String>) {
+    let mut block: &mut OutputBlock = match self.raw_output.last_mut() {
+      Some(b) => b,
+      None => {
+        self.raw_output.push(self.new_block());
+        self.raw_output.last_mut().unwrap()
+      }
+    };
+
+    loop {
+      let avail_capacity = block.capacity();
+      let (data, remain) = {
+        let res = buff.split_at(avail_capacity as usize);
+        (res.0.to_vec(), res.1.to_vec())
+      };
+
+      block.append(data);
+      buff = remain.to_vec();
+
+      if buff.is_empty() {
+        break;
+      }
+
+      self.raw_output.push(self.new_block());
+
+      block = self.raw_output.last_mut().unwrap();
+    }
+  }
+
+  pub fn next_line(&self) -> Option<String> {
+    if self.raw_output.is_empty() {
+      return None;
+    }
+
+    if self.offset.0 < self.raw_output.len() {
+      let block = self.raw_output.get(self.offset.0).unwrap();
+
+      if block.is_empty() {
+        return None
+      }
+
+      if (block.len() as i32) < self.offset.1 {
+        panic!("Incorrect line offset provided")
+      }
+
+      return Some(
+        block.content.get(self.offset.1 as usize).unwrap().clone()
+      );
+    } else {
+      panic!("Incorrect block offset provided")
+    }
+  }
+
+  pub fn new_block(&self) -> OutputBlock {
+    OutputBlock::new(BUFFER_BLOCK_SIZE)
+  }
+}
+
+const BUFFER_BLOCK_SIZE: i32 = 100;
+
+pub struct OutputBlock {
+  content: Vec<String>,
+  size: i32
+}
+
+impl OutputBlock {
+  pub fn new(size: i32) -> Self {
+    Self {
+      content: vec![],
+      size
+    }
+  }
+
+  pub fn len(&self) -> usize {
+    self.content.len()
+  }
+
+  pub fn is_empty(&self) -> bool {
+    self.content.is_empty()
+  }
+
+  pub fn capacity(&self) -> i32 {
+    BUFFER_BLOCK_SIZE - self.content.len() as i32
+  }
+
+  pub fn append(&mut self, mut data: Vec<String>) {
+    if data.len() as i32 > self.capacity() {
+      panic!("There are not enought capacity to apped data");
+    }
+
+    self.content.append(&mut data);
+  }
+}
