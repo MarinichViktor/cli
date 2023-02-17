@@ -2,7 +2,7 @@ const DEFAULT_BUFFER_BLOCK_SIZE: i32 = 100;
 
 pub struct Buff {
   pub blocks: Vec<Block>,
-  block_size: i32
+  pub block_size: i32
 }
 
 impl Default for Buff {
