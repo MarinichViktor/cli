@@ -1,6 +1,6 @@
 use std::process::exit;
 use std::time::{Duration, Instant};
-use term::project::{Project, ProjectDescriptor};
+use term::project::{ProjectDescriptor};
 use crossterm::execute;
 use crossterm::event::{Event};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};

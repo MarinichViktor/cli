@@ -1,5 +1,5 @@
 use std::{sync::Mutex, time::Instant, vec, process::Child};
-use crate::result::{Result, bail};
+use crate::result::{Result};
 use std::io::{BufReader};
 use std::sync::Arc;
 use std::io::BufRead;
@@ -7,6 +7,8 @@ use std::sync::mpsc::{channel};
 use std::time::Duration;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
+use crate::buffer::Buff;
+
 static PROCESS_DELAY: u64 = 200;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -24,7 +26,9 @@ pub struct Project {
   pub output: Arc<Mutex<Vec<String>>>,
   pub child: Option<Child>,
   pub offset: Arc<Mutex<i32>>,
+  pub offset2: Arc<Mutex<(usize, usize)>>,
   pub status: Arc<Mutex<ProcessStatus>>,
+  buff: Arc<Mutex<Buff>>
 }
 
 impl From<ProjectDescriptor> for Project {
@@ -47,6 +51,8 @@ impl Project {
       output: Arc::new(Mutex::new(vec![])),
       child: None,
       offset: Arc::new(Mutex::new(0)),
+      offset2: Arc::new(Mutex::new((0, 0))),
+      buff: Arc::new(Mutex::new(Buff::default())),
       status: Arc::new(
         Mutex::new(
           ProcessStatus {
@@ -127,7 +133,7 @@ impl Project {
     });
 
     let out = self.output.clone();
-    let offset = self.offset.clone();
+    // let offset = self.offset.clone();
     std::thread::spawn(move || {
       loop {
         let mut buff = vec![];
@@ -174,104 +180,163 @@ impl Project {
       // .map(str::to_owned)
       .collect()
   }
+
+  pub fn render(&self, w: u32, h: u32) -> Vec<String> {
+    let mut v = vec![];
+    let buff = self.buff.lock().unwrap();
+
+    if buff.blocks.is_empty() {
+      return v;
+    }
+
+    let offset = self.offset2.lock().unwrap();
+    let block = buff.blocks.get(offset.0).unwrap();
+    let (fh, lh) = block.data().split_at(offset.1);
+
+    v.append(&mut self.chop_to_w(lh, w as usize));
+
+    let initial_len = v.len();
+    let mut upper_offset = offset.0 + 1;
+    println!("initial_len {}", v.len());
+
+    while (v.len() < h as usize) && (upper_offset < buff.blocks.len())  {
+      let block = buff.blocks.get(upper_offset).unwrap();
+      v.append(&mut self.chop_to_w(block.data(), w as usize).to_vec());
+      upper_offset += 1;
+    }
+    let appended_from_next_blocks = v.len() - initial_len;
+
+    if (v.len() < h as usize) && !fh.is_empty() {
+      let mut v2= self.chop_to_w(fh, w as usize).to_vec();
+      v2.append(&mut v);
+      v = v2;
+    }
+
+    let mut lower_offset = offset.0 - 1;
+
+    while (v.len() < h as usize) && (lower_offset > 0)  {
+
+      let block = buff.blocks.get(lower_offset).unwrap();
+      v.append(&mut self.chop_to_w(block.data(), w as usize));
+      upper_offset -= 1;
+    }
+
+    let appended_from_prev_blocks = v.len() - initial_len - appended_from_next_blocks;
+
+    if v.len() > h as usize {
+      if appended_from_prev_blocks > 0 {
+        let (st, remainder) = v.split_at(v.len() - (h as usize));
+        v = remainder.to_vec();
+      } else {
+        v.truncate(h as usize);
+      }
+    }
+    v
+  }
+
+  fn chop_to_w(&self, data: &[String], w: usize) -> Vec<String> {
+    data
+      .iter()
+      .flat_map(|line| {
+        let mut chars: Vec<char> = line.chars().collect();
+        if chars.is_empty() {
+          chars.push('\n');
+        }
+        chars.chunks(w)
+          .map(|ch| ch.into_iter().collect::<String>())
+          .collect::<Vec<String>>()
+      })
+      .collect::<Vec<String>>()
+  }
 }
 
-pub struct OutputBuffer {
-  raw_output: Vec<OutputBlock>,
-  pub offset: (usize,i32),
-}
+#[cfg(test)]
+mod project_tests {
+  use std::sync::{Arc, Mutex};
+  use crate::buffer::Buff;
+  use crate::project::Project;
 
-impl OutputBuffer {
-  pub fn append(&mut self,  mut buff: Vec<String>) {
-    let mut block: &mut OutputBlock = match self.raw_output.last_mut() {
-      Some(b) => b,
-      None => {
-        self.raw_output.push(self.new_block());
-        self.raw_output.last_mut().unwrap()
-      }
-    };
+  #[test]
+  fn render_when_block_contains_all_data() {
+   let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
+    let mut buff = Buff::new(
+      [
+        "1*1*1*1".to_string(),
+        "2*2*2*2".to_string(),
+        "3*3*3*3".to_string(),
+        "4*4*4*4".to_string(),
+        "5*5*5*5".to_string(),
+      ].to_vec(),
+      (0, 0),
+      2
+    );
+    project.buff = Arc::new(Mutex::new(buff));
+    project.offset2 = Arc::new(Mutex::new((1, 1)));
 
-    loop {
-      let avail_capacity = block.capacity();
-      let (data, remain) = {
-        let res = buff.split_at(avail_capacity as usize);
-        (res.0.to_vec(), res.1.to_vec())
-      };
-
-      block.append(data);
-      buff = remain.to_vec();
-
-      if buff.is_empty() {
-        break;
-      }
-
-      self.raw_output.push(self.new_block());
-
-      block = self.raw_output.last_mut().unwrap();
-    }
+    assert_eq!(
+      project.render(3, 2),
+      [
+        "4*4",
+        "*4*",
+      ]
+    );
   }
 
-  pub fn next_line(&self) -> Option<String> {
-    if self.raw_output.is_empty() {
-      return None;
-    }
+  #[test]
+  fn render_when_data_spans_current_and_next_blocks() {
+    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
+    let mut buff = Buff::new(
+      [
+        "1*1*1*1".to_string(),
+        "2*2*2*2".to_string(),
+        "3*3*3*3".to_string(),
+        "4*4*4*4".to_string(),
+        "5*5*5*5".to_string(),
+      ].to_vec(),
+      (0, 0),
+      2
+    );
+    project.buff = Arc::new(Mutex::new(buff));
+    project.offset2 = Arc::new(Mutex::new((1, 1)));
 
-    if self.offset.0 < self.raw_output.len() {
-      let block = self.raw_output.get(self.offset.0).unwrap();
-
-      if block.is_empty() {
-        return None
-      }
-
-      if (block.len() as i32) < self.offset.1 {
-        panic!("Incorrect line offset provided")
-      }
-
-      return Some(
-        block.content.get(self.offset.1 as usize).unwrap().clone()
-      );
-    } else {
-      panic!("Incorrect block offset provided")
-    }
+    assert_eq!(
+      project.render(3, 4),
+      [
+        "4*4",
+        "*4*",
+        "4",
+        "5*5",
+      ]
+    );
   }
 
-  pub fn new_block(&self) -> OutputBlock {
-    OutputBlock::new(BUFFER_BLOCK_SIZE)
-  }
-}
 
-const BUFFER_BLOCK_SIZE: i32 = 100;
+  #[test]
+  fn render_when_data_spans_current_and_previous_blocks() {
+    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
+    let mut buff = Buff::new(
+      [
+        "1*1*1*1".to_string(),
+        "2*2*2*2".to_string(),
+        "3*3*3*3".to_string(),
+        "4*4*4*4".to_string(),
+        "5*5*5*5".to_string(),
+      ].to_vec(),
+      (0, 0),
+      2
+    );
+    project.buff = Arc::new(Mutex::new(buff));
+    project.offset2 = Arc::new(Mutex::new((1, 1)));
 
-pub struct OutputBlock {
-  content: Vec<String>,
-  size: i32
-}
-
-impl OutputBlock {
-  pub fn new(size: i32) -> Self {
-    Self {
-      content: vec![],
-      size
-    }
-  }
-
-  pub fn len(&self) -> usize {
-    self.content.len()
-  }
-
-  pub fn is_empty(&self) -> bool {
-    self.content.is_empty()
-  }
-
-  pub fn capacity(&self) -> i32 {
-    BUFFER_BLOCK_SIZE - self.content.len() as i32
-  }
-
-  pub fn append(&mut self, mut data: Vec<String>) {
-    if data.len() as i32 > self.capacity() {
-      panic!("There are not enought capacity to apped data");
-    }
-
-    self.content.append(&mut data);
+    assert_eq!(
+      project.render(5, 5),
+      [
+        "*3",
+        "4*4*4",
+        "*4",
+        "5*5*5",
+        "*5",
+      ]
+    );
   }
 }

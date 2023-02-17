@@ -1,4 +1,3 @@
-use std::time::{Instant, SystemTime};
 use tui::{
   Frame,
   backend::{Backend},
