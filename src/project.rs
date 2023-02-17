@@ -197,7 +197,6 @@ impl Project {
 
     let initial_len = v.len();
     let mut upper_offset = offset.0 + 1;
-    println!("initial_len {}", v.len());
 
     while (v.len() < h as usize) && (upper_offset < buff.blocks.len())  {
       let block = buff.blocks.get(upper_offset).unwrap();
@@ -212,7 +211,7 @@ impl Project {
       v = v2;
     }
 
-    let mut lower_offset = offset.0 - 1;
+    let lower_offset = offset.0 - 1;
 
     while (v.len() < h as usize) && (lower_offset > 0)  {
 
@@ -256,10 +255,8 @@ mod project_tests {
   use crate::buffer::Buff;
   use crate::project::Project;
 
-  #[test]
-  fn render_when_block_contains_all_data() {
-   let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let mut buff = Buff::new(
+  fn create_buff() -> Buff {
+    Buff::new(
       [
         "1*1*1*1".to_string(),
         "2*2*2*2".to_string(),
@@ -267,9 +264,14 @@ mod project_tests {
         "4*4*4*4".to_string(),
         "5*5*5*5".to_string(),
       ].to_vec(),
-      (0, 0),
       2
-    );
+    )
+  }
+
+  #[test]
+  fn render_when_block_contains_all_data() {
+    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
+    let buff = create_buff();
     project.buff = Arc::new(Mutex::new(buff));
     project.offset2 = Arc::new(Mutex::new((1, 1)));
 
@@ -285,17 +287,7 @@ mod project_tests {
   #[test]
   fn render_when_data_spans_current_and_next_blocks() {
     let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let mut buff = Buff::new(
-      [
-        "1*1*1*1".to_string(),
-        "2*2*2*2".to_string(),
-        "3*3*3*3".to_string(),
-        "4*4*4*4".to_string(),
-        "5*5*5*5".to_string(),
-      ].to_vec(),
-      (0, 0),
-      2
-    );
+    let buff = create_buff();
     project.buff = Arc::new(Mutex::new(buff));
     project.offset2 = Arc::new(Mutex::new((1, 1)));
 
@@ -314,17 +306,7 @@ mod project_tests {
   #[test]
   fn render_when_data_spans_current_and_previous_blocks() {
     let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let mut buff = Buff::new(
-      [
-        "1*1*1*1".to_string(),
-        "2*2*2*2".to_string(),
-        "3*3*3*3".to_string(),
-        "4*4*4*4".to_string(),
-        "5*5*5*5".to_string(),
-      ].to_vec(),
-      (0, 0),
-      2
-    );
+    let buff = create_buff();
     project.buff = Arc::new(Mutex::new(buff));
     project.offset2 = Arc::new(Mutex::new((1, 1)));
 

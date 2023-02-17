@@ -2,7 +2,6 @@ const DEFAULT_BUFFER_BLOCK_SIZE: i32 = 100;
 
 pub struct Buff {
   pub blocks: Vec<Block>,
-  offset: (usize,i32),
   block_size: i32
 }
 
@@ -10,7 +9,6 @@ impl Default for Buff {
   fn default() -> Self {
     Self {
       blocks: vec![],
-      offset: (0,0),
       block_size: DEFAULT_BUFFER_BLOCK_SIZE
     }
   }
@@ -60,11 +58,10 @@ impl Buff {
     container
   }
 
-  pub fn new(content: Vec<String>, offset: (usize,i32), block_size: i32) -> Self {
+  pub fn new(content: Vec<String>, block_size: i32) -> Self {
     let mut buff = Self {
       blocks: vec![],
-      offset: offset,
-      block_size: block_size
+      block_size
     };
     buff.append(content);
     buff

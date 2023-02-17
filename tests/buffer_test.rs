@@ -12,7 +12,7 @@ fn gen_lines(len: usize) -> Vec<String> {
 
 #[test]
 fn append_with_empty_blocks_pushes_data_to_the_new_block() {
-  let mut buff = Buff::new(vec![], (0, 0), 32);
+  let mut buff = Buff::new(vec![], 32);
   let new_content = gen_lines(20);
 
   buff.append(new_content.clone());
@@ -22,11 +22,7 @@ fn append_with_empty_blocks_pushes_data_to_the_new_block() {
 
 #[test]
 fn append_generates_new_blocks_to_fit_data() {
-  let mut buff = Buff::new(
-    ["Foo".to_string()].to_vec(),
-    (0, 0),
-    2
-  );
+  let mut buff = Buff::new(["Foo".to_string()].to_vec(), 2);
   let new_content = gen_lines(4);
 
   buff.append(new_content.clone());
