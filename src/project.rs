@@ -182,39 +182,38 @@ impl Project {
   }
 
   pub fn render(&self, w: u32, h: u32) -> Vec<String> {
-    let mut v = vec![];
-    let (block_idx, line_idx) = self.render_offset(w as usize, h as usize);
-
+    let mut output = vec![];
     let buff = self.buff.lock().unwrap();
 
     if buff.blocks.is_empty() {
-      return v;
+      return output;
     }
 
-    let (init_block_idx, init_line_idx) = *self.offset2.lock().unwrap();
-    println!("Before render_offset {} - {}", block_idx, line_idx);
-    let mut curr_block_idx = block_idx;
-    let mut curr_line_idx = line_idx;
+    let render_offset = self.render_offset(w as usize, h as usize);
+    let init_offset = *self.offset2.lock().unwrap();
+    let mut curr_offset = render_offset.clone();
 
-    while (v.len() < h as usize) && (curr_block_idx < buff.blocks.len())  {
-      let block = buff.blocks.get(curr_block_idx).unwrap();
-      v.append(&mut self.chop_to_w(&block.data()[curr_line_idx..], w as usize).to_vec());
-      curr_block_idx += 1;
-      curr_line_idx = 0;
+    while (output.len() < h as usize) && (curr_offset.0 < buff.blocks.len())  {
+      let block = buff.blocks.get(curr_offset.0).unwrap();
+      output.append(&mut self.chop_to_w(&block.data()[curr_offset.1..], w as usize).to_vec());
+      curr_offset.0 += 1;
+      curr_offset.1 = 0;
     }
+    drop(buff);
 
-    let is_prepended = block_idx < init_block_idx || (block_idx == init_block_idx && line_idx < init_line_idx);
+    let is_prepended = render_offset.0 < init_offset.0 ||
+        (render_offset.0 == init_offset.0 && render_offset.1 < init_offset.1);
 
-    if is_prepended && v.len() > h as usize {
-      println!("is_prepended {}", is_prepended);
-      let (_, rem) = v.split_at(v.len() - h as usize);
-      v = rem.to_vec();
+    if (render_offset.0 < init_offset.0 || (render_offset.0 == init_offset.0 && render_offset.1 < init_offset.1))
+        && output.len() > h as usize
+    {
+      let (_, rem) = output.split_at(output.len() - h as usize);
+      output = rem.to_vec();
     } else {
-      println!("truncate {}", is_prepended);
-      v.truncate(h as usize);
+      output.truncate(h as usize);
     }
 
-    return v;
+    return output;
 
     // end alter
   }
