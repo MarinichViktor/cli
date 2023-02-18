@@ -181,41 +181,37 @@ impl Project {
       .collect()
   }
 
-  pub fn render(&self, w: u32, h: u32) -> Vec<String> {
+  pub fn render(&self, w: usize, h: usize) -> Vec<String> {
     let mut output = vec![];
-    let buff = self.buff.lock().unwrap();
-
-    if buff.blocks.is_empty() {
-      return output;
-    }
-
-    let render_offset = self.render_offset(w as usize, h as usize);
+    let render_offset = self.render_offset(w, h);
     let init_offset = *self.offset2.lock().unwrap();
     let mut curr_offset = render_offset.clone();
 
-    while (output.len() < h as usize) && (curr_offset.0 < buff.blocks.len())  {
-      let block = buff.blocks.get(curr_offset.0).unwrap();
-      output.append(&mut self.chop_to_w(&block.data()[curr_offset.1..], w as usize).to_vec());
-      curr_offset.0 += 1;
-      curr_offset.1 = 0;
-    }
-    drop(buff);
+    {
+      let buff = self.buff.lock().unwrap();
 
-    let is_prepended = render_offset.0 < init_offset.0 ||
-        (render_offset.0 == init_offset.0 && render_offset.1 < init_offset.1);
+      if buff.blocks.is_empty() {
+        return output;
+      }
+
+      while (output.len() < h as usize) && (curr_offset.0 < buff.blocks.len())  {
+        let block = buff.blocks.get(curr_offset.0).unwrap();
+        output.append(&mut self.build_lines(&block.data()[curr_offset.1..], w).to_vec());
+        curr_offset.0 += 1;
+        curr_offset.1 = 0;
+      }
+    }
 
     if (render_offset.0 < init_offset.0 || (render_offset.0 == init_offset.0 && render_offset.1 < init_offset.1))
-        && output.len() > h as usize
+        && output.len() > h
     {
-      let (_, rem) = output.split_at(output.len() - h as usize);
+      let (_, rem) = output.split_at(output.len() - h);
       output = rem.to_vec();
     } else {
-      output.truncate(h as usize);
+      output.truncate(h);
     }
 
     return output;
-
-    // end alter
   }
 
   pub fn render_offset(&self, w: usize, h: usize) -> (usize, usize) {
@@ -225,10 +221,10 @@ impl Project {
       return (0, 0);
     }
 
-    let (init_block_idx, init_line_idx) = *self.offset2.lock().unwrap();
-    let mut block_idx = init_block_idx;
-    let mut line_idx = init_line_idx;
+    let init_offset = *self.offset2.lock().unwrap();
+    let mut offset = init_offset.clone();
     let mut total_lines = 0;
+
     let lines_num = |buff: &[String]| {
       buff.iter()
           .map(|s| ((s.len() as f32)/(w as f32)).ceil() as usize)
@@ -236,61 +232,59 @@ impl Project {
     };
 
     loop {
-      let block = buff.blocks.get(block_idx).unwrap();
-      total_lines += lines_num(&block.data()[line_idx..]);
+      let block = buff.blocks.get(offset.0).unwrap();
+      total_lines += lines_num(&block.data()[offset.1..]);
 
-      if total_lines >= h as usize {
+      if total_lines >= h {
         break;
       }
 
-      if block_idx == buff.blocks.len() -1 {
+      if offset.0 == buff.blocks.len() -1 {
         break;
       }
 
-      block_idx += 1;
-      line_idx = 0;
+      offset.0 += 1;
+      offset.1 = 0;
     }
 
-    if total_lines >= h as usize {
-      return (init_block_idx, init_line_idx);
+    if total_lines >= h {
+      return init_offset;
     }
 
-    if init_line_idx > 0 {
-      block_idx = init_block_idx;
-      line_idx = init_line_idx;
-    } else if init_block_idx > 0 {
-      block_idx = init_line_idx - 1;
-      line_idx = buff.block_size as usize;
+    if init_offset.1 > 0 {
+      offset = init_offset.clone();
+    } else if init_offset.0 > 0 {
+      offset.0 = init_offset.0 - 1;
+      offset.1 = buff.block_size as usize;
     }
 
     loop {
-      let block = buff.blocks.get(block_idx).unwrap();
-      total_lines += lines_num(&block.data()[..line_idx]);
+      let block = buff.blocks.get(offset.0).unwrap();
+      total_lines += lines_num(&block.data()[..offset.1]);
 
-      if total_lines >= h as usize {
+      if total_lines >= h {
         break;
       }
 
-      if block_idx == 0 {
+      if offset.0 == 0 {
         break;
       }
 
-      block_idx -= 1;
-      line_idx = buff.block_size as usize;
+      offset.0 -= 1;
+      offset.1 = buff.block_size as usize;
     }
 
-    line_idx = 0;
+    offset.1 = 0;
 
-    if init_block_idx < block_idx {
-      block_idx = init_block_idx;
-      line_idx = init_line_idx;
+    if init_offset.0 < offset.0 {
+      offset = init_offset.clone();
     }
 
-    (block_idx, line_idx)
+    offset
   }
 
 
-  fn chop_to_w(&self, data: &[String], w: usize) -> Vec<String> {
+  fn build_lines(&self, data: &[String], w: usize) -> Vec<String> {
     data
       .iter()
       .flat_map(|line| {
@@ -359,9 +353,8 @@ mod project_tests {
     );
   }
 
-
   #[test]
-  fn render_when_data_spans_current_and_previous_blocks() {
+  fn render_when_data_spans_current_and_next_and_previous_blocks() {
     let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
     let buff = create_buff();
     project.buff = Arc::new(Mutex::new(buff));
