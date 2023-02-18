@@ -182,27 +182,63 @@ impl Project {
   }
 
   pub fn render(&self, w: u32, h: u32) -> Vec<String> {
-    // alternative impl
     let mut v = vec![];
+    let (block_idx, line_idx) = self.render_offset(w as usize, h as usize);
+
     let buff = self.buff.lock().unwrap();
 
     if buff.blocks.is_empty() {
       return v;
     }
+
+    let (init_block_idx, init_line_idx) = *self.offset2.lock().unwrap();
+    println!("Before render_offset {} - {}", block_idx, line_idx);
+    let mut curr_block_idx = block_idx;
+    let mut curr_line_idx = line_idx;
+
+    while (v.len() < h as usize) && (curr_block_idx < buff.blocks.len())  {
+      let block = buff.blocks.get(curr_block_idx).unwrap();
+      v.append(&mut self.chop_to_w(&block.data()[curr_line_idx..], w as usize).to_vec());
+      curr_block_idx += 1;
+      curr_line_idx = 0;
+    }
+
+    let is_prepended = block_idx < init_block_idx || (block_idx == init_block_idx && line_idx < init_line_idx);
+
+    if is_prepended && v.len() > h as usize {
+      println!("is_prepended {}", is_prepended);
+      let (_, rem) = v.split_at(v.len() - h as usize);
+      v = rem.to_vec();
+    } else {
+      println!("truncate {}", is_prepended);
+      v.truncate(h as usize);
+    }
+
+    return v;
+
+    // end alter
+  }
+
+  pub fn render_offset(&self, w: usize, h: usize) -> (usize, usize) {
+    let buff = self.buff.lock().unwrap();
+
+    if buff.blocks.is_empty() {
+      return (0, 0);
+    }
+
     let (init_block_idx, init_line_idx) = *self.offset2.lock().unwrap();
     let mut block_idx = init_block_idx;
     let mut line_idx = init_line_idx;
-    let mut total_lines = 0usize;
+    let mut total_lines = 0;
+    let lines_num = |buff: &[String]| {
+      buff.iter()
+          .map(|s| ((s.len() as f32)/(w as f32)).ceil() as usize)
+          .sum::<usize>()
+    };
 
     loop {
       let block = buff.blocks.get(block_idx).unwrap();
-
-      total_lines += &block.data()[line_idx..]
-          .iter()
-          .map(|s| {
-            ((s.len() as f32)/(w as f32)).ceil() as usize
-          })
-          .sum::<usize>();
+      total_lines += lines_num(&block.data()[line_idx..]);
 
       if total_lines >= h as usize {
         break;
@@ -216,66 +252,44 @@ impl Project {
       line_idx = 0;
     }
 
-    let mut is_prepended = false;
-
-    if total_lines < h as usize {
-      if init_line_idx > 0 {
-        block_idx = init_block_idx;
-        line_idx = init_line_idx;
-      } else if init_block_idx > 0 {
-        block_idx = init_line_idx - 1;
-        line_idx = buff.block_size as usize;
-      }
-
-      loop {
-        let block = buff.blocks.get(block_idx).unwrap();
-
-        total_lines += &block.data()[..line_idx]
-            .iter()
-            .map(|s| {
-              ((s.len() as f32)/(w as f32)).ceil() as usize
-            })
-            .sum::<usize>();
-
-        if total_lines >= h as usize {
-          break;
-        }
-
-        if block_idx == 0 {
-          break;
-        }
-
-        block_idx -= 1;
-        line_idx = buff.block_size as usize;
-      }
-
-      line_idx = 0;
-      is_prepended = true;
+    if total_lines >= h as usize {
+      return (init_block_idx, init_line_idx);
     }
+
+    if init_line_idx > 0 {
+      block_idx = init_block_idx;
+      line_idx = init_line_idx;
+    } else if init_block_idx > 0 {
+      block_idx = init_line_idx - 1;
+      line_idx = buff.block_size as usize;
+    }
+
+    loop {
+      let block = buff.blocks.get(block_idx).unwrap();
+      total_lines += lines_num(&block.data()[..line_idx]);
+
+      if total_lines >= h as usize {
+        break;
+      }
+
+      if block_idx == 0 {
+        break;
+      }
+
+      block_idx -= 1;
+      line_idx = buff.block_size as usize;
+    }
+
+    line_idx = 0;
 
     if init_block_idx < block_idx {
       block_idx = init_block_idx;
       line_idx = init_line_idx;
     }
 
-    while (v.len() < h as usize) && (block_idx < buff.blocks.len())  {
-      let block = buff.blocks.get(block_idx).unwrap();
-      v.append(&mut self.chop_to_w(&block.data()[line_idx..], w as usize).to_vec());
-      block_idx += 1;
-      line_idx = 0;
-    }
-
-    if is_prepended && v.len() > h as usize {
-      let (_, rem) = v.split_at(v.len() - h as usize);
-      v = rem.to_vec();
-    } else {
-      v.truncate(h as usize);
-    }
-
-    return v;
-
-    // end alter
+    (block_idx, line_idx)
   }
+
 
   fn chop_to_w(&self, data: &[String], w: usize) -> Vec<String> {
     data
