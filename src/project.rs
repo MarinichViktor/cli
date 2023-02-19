@@ -146,7 +146,7 @@ impl Project {
     });
 
     let out = self.output.clone();
-    // let offset = self.offset.clone();
+
     std::thread::spawn(move || {
       loop {
         let mut buff = vec![];
@@ -155,7 +155,6 @@ impl Project {
           buff.push(line);
         }
 
-        // todo: store output in lines instead of string
         if !buff.is_empty() {
           let mut data = out.lock().unwrap();
           data.output.append(&mut buff.clone());
@@ -163,14 +162,7 @@ impl Project {
 
           if cache_width > 0 {
             data.cache.append(&mut Project::build_lines(&buff, cache_width));
-            // println!("Append {:?}", data.cache)
-          } else {
-            // println!("Not Append {:?}", data.cache)
           }
-          // if data.len() > 10_000 {
-          //   let (_, remain) = data.split_at(data.len() - 5_000);
-          //   *data = remain.to_vec();
-          // }
         }
 
         std::thread::sleep(Duration::from_millis(PROCESS_DELAY));
@@ -187,12 +179,11 @@ impl Project {
 
     if output.cached_width != w {
       let cached_lines = Project::build_lines(&output.output, w);
-      // println!("cached_linesx {:?}", output.output.len());
 
       output.cache = cached_lines;
       output.cached_width = w;
     }
-    // println!("cached_linesy {:?}", output.cache.len());
+
     let offset = { *self.offset.lock().unwrap() };
 
     if output.cache.len() > h {

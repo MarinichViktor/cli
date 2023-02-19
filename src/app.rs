@@ -79,15 +79,8 @@ impl App {
       KeyCode::Down => match self.active_tab {
         AppTab::Sidebar => self.select_next(),
         AppTab::Console => {
-          // todo: to be refactored
           let mut offset = self.selected_project().offset.lock().unwrap();
           *offset = (*offset - 1).max(0);
-          // let curr_offset = *self.selected_project().offset.lock().unwrap();
-          // *self.selected_project().offset.lock().unwrap() = if curr_offset > 0 {
-          //   curr_offset - 1
-          // } else {
-          //   0
-          // };
         }
       },
       KeyCode::PageDown => {
