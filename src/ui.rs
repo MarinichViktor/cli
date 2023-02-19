@@ -111,25 +111,11 @@ fn render_console<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &mut App) 
   app.console_widget_size = text_area;
 
   // todo: to be refactored
-  let calculated_lines = app.lines(text_area.width);
-  let items = if !calculated_lines.is_empty() {
-    let mut offset = app.selected_project().offset.lock().unwrap();
-    let line_start_index = (calculated_lines.len().saturating_sub(text_area.height as usize) as i32 - *offset).max(0) as usize;
-    if calculated_lines.len() > text_area.height as usize  && *offset > calculated_lines.len() as i32 - text_area.height as i32 {
-      *offset = calculated_lines.len() as i32 - text_area.height as i32;
-    }
-    drop(offset);
-    let line_end_index = (line_start_index + text_area.height as usize).min(calculated_lines.len() - 1);
-    if line_start_index != line_end_index {
-      block = block.title(format!("Console ({}-{} of {})", line_start_index+ 1, line_end_index + 1, calculated_lines.len()));
-    }
-    &calculated_lines[line_start_index..=line_end_index]
-  } else {
-    &calculated_lines[..]
-  };
-  // let calculated_lines = app.lines(text_area.width);
-  // let mut text = app.lines(block.inner(area).width).join("\n");
-  // let items = &calculated_lines[(calculated_lines.len().saturating_sub(text_area.height as usize)).max(0)..];
+
+  // let items: Vec<String> = vec![];//app.lines(text_area.width as usize, text_area.height as usize);
+  let items: Vec<String> = app.lines(text_area.width as usize, text_area.height as usize);
+  // println!("Ittems {:?}", items);
+
   let text = items.join("\n");
 
   let paragraph = Paragraph::new(text)

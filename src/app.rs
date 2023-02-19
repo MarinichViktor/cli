@@ -14,8 +14,8 @@ pub struct App {
 }
 
 impl App {
-  pub fn lines(&mut self, width: u16) -> Vec<String> {
-    self.selected_project().lines(width)
+  pub fn lines(&mut self, w: usize, h: usize) -> Vec<String> {
+    self.selected_project().render(w, h)
   }
 
   pub fn selected_project<'a>(&'a mut self) -> &'a mut Project {
@@ -80,12 +80,14 @@ impl App {
         AppTab::Sidebar => self.select_next(),
         AppTab::Console => {
           // todo: to be refactored
-          let curr_offset = *self.selected_project().offset.lock().unwrap();
-          *self.selected_project().offset.lock().unwrap() = if curr_offset > 0 {
-            curr_offset - 1
-          } else {
-            0
-          };
+          let mut offset = self.selected_project().offset.lock().unwrap();
+          *offset = (*offset - 1).max(0);
+          // let curr_offset = *self.selected_project().offset.lock().unwrap();
+          // *self.selected_project().offset.lock().unwrap() = if curr_offset > 0 {
+          //   curr_offset - 1
+          // } else {
+          //   0
+          // };
         }
       },
       KeyCode::PageDown => {

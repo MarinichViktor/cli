@@ -7,7 +7,6 @@ use std::sync::mpsc::{channel};
 use std::time::Duration;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
-use crate::buffer::Buff;
 
 static PROCESS_DELAY: u64 = 200;
 
@@ -18,20 +17,32 @@ pub struct ProjectDescriptor {
   pub workdir: String,
 }
 
+pub struct ProjectOutput {
+  pub output: Vec<String>,
+  pub cached_width: usize,
+  pub cache: Vec<String>,
+}
+
+impl ProjectOutput {
+  pub fn clear(&mut self) {
+    self.output.clear();
+    self.cache.clear();
+    self.cached_width = 0;
+  }
+}
+
 // todo: to be refactored
 pub struct Project {
   pub name: String,
   pub executable: String,
   pub workdir: String,
-  pub output: Arc<Mutex<Vec<String>>>,
+  pub output: Arc<Mutex<ProjectOutput>>,
   pub child: Option<Child>,
   pub offset: Arc<Mutex<i32>>,
-  pub offset2: Arc<Mutex<(usize, usize)>>,
   pub status: Arc<Mutex<ProcessStatus>>,
-  buff: Arc<Mutex<Buff>>
 }
 
-impl From<ProjectDescriptor> for Project {
+impl<'a> From<ProjectDescriptor> for Project {
   fn from(descriptor: ProjectDescriptor) -> Self {
     Project::new(descriptor.name, descriptor.executable, descriptor.workdir)
   }
@@ -48,11 +59,13 @@ impl Project {
       name,
       executable,
       workdir,
-      output: Arc::new(Mutex::new(vec![])),
+      output: Arc::new(Mutex::new(ProjectOutput {
+        output: vec![],
+        cached_width: 0,
+        cache: vec![]
+      })),
       child: None,
       offset: Arc::new(Mutex::new(0)),
-      offset2: Arc::new(Mutex::new((0, 0))),
-      buff: Arc::new(Mutex::new(Buff::default())),
       status: Arc::new(
         Mutex::new(
           ProcessStatus {
@@ -145,12 +158,19 @@ impl Project {
         // todo: store output in lines instead of string
         if !buff.is_empty() {
           let mut data = out.lock().unwrap();
-          data.append(&mut buff);
+          data.output.append(&mut buff.clone());
+          let cache_width = data.cached_width;
 
-          if data.len() > 10_000 {
-            let (_, remain) = data.split_at(data.len() - 5_000);
-            *data = remain.to_vec();
+          if cache_width > 0 {
+            data.cache.append(&mut Project::build_lines(&buff, cache_width));
+            // println!("Append {:?}", data.cache)
+          } else {
+            // println!("Not Append {:?}", data.cache)
           }
+          // if data.len() > 10_000 {
+          //   let (_, remain) = data.split_at(data.len() - 5_000);
+          //   *data = remain.to_vec();
+          // }
         }
 
         std::thread::sleep(Duration::from_millis(PROCESS_DELAY));
@@ -162,139 +182,42 @@ impl Project {
     Ok(())
   }
 
-  pub fn lines(&mut self, width: u16) -> Vec<String> {
-    self.output.lock()
-      .unwrap()
-      .iter()
-      .flat_map(|line| {
-        let mut chars: Vec<char> = line.chars().collect();
-        if chars.is_empty() {
-          chars.push('\n');
-        }
-        chars.chunks(width as usize)
-          .map(|ch| {
-            ch.into_iter().collect::<String>()
-          })
-          .collect::<Vec<String>>()
-      })
-      // .map(str::to_owned)
-      .collect()
-  }
-
   pub fn render(&self, w: usize, h: usize) -> Vec<String> {
-    let mut output = vec![];
-    let render_offset = self.render_offset(w, h);
-    let init_offset = *self.offset2.lock().unwrap();
-    let mut curr_offset = render_offset.clone();
+    let mut output = self.output.lock().unwrap();
 
-    {
-      let buff = self.buff.lock().unwrap();
+    if output.cached_width != w {
+      let cached_lines = Project::build_lines(&output.output, w);
+      // println!("cached_linesx {:?}", output.output.len());
 
-      if buff.blocks.is_empty() {
-        return output;
-      }
-
-      while (output.len() < h as usize) && (curr_offset.0 < buff.blocks.len())  {
-        let block = buff.blocks.get(curr_offset.0).unwrap();
-        output.append(&mut self.build_lines(&block.data()[curr_offset.1..], w).to_vec());
-        curr_offset.0 += 1;
-        curr_offset.1 = 0;
-      }
+      output.cache = cached_lines;
+      output.cached_width = w;
     }
+    // println!("cached_linesy {:?}", output.cache.len());
+    let offset = { *self.offset.lock().unwrap() };
 
-    if (render_offset.0 < init_offset.0 || (render_offset.0 == init_offset.0 && render_offset.1 < init_offset.1))
-        && output.len() > h
-    {
-      let (_, rem) = output.split_at(output.len() - h);
-      output = rem.to_vec();
+    if output.cache.len() > h {
+      let start_index = ((output.cache.len() as i32)  - (h as i32) - offset).max(0) as usize;
+      output.cache[start_index..(start_index + h)].to_vec()
     } else {
-      output.truncate(h);
+      output.cache.clone()
     }
-
-    return output;
   }
 
-  pub fn render_offset(&self, w: usize, h: usize) -> (usize, usize) {
-    let buff = self.buff.lock().unwrap();
-
-    if buff.blocks.is_empty() {
-      return (0, 0);
-    }
-
-    let init_offset = *self.offset2.lock().unwrap();
-    let mut offset = init_offset.clone();
-    let mut total_lines = 0;
-
-    let lines_num = |buff: &[String]| {
-      buff.iter()
-          .map(|s| ((s.len() as f32)/(w as f32)).ceil() as usize)
-          .sum::<usize>()
-    };
-
-    loop {
-      let block = buff.blocks.get(offset.0).unwrap();
-      total_lines += lines_num(&block.data()[offset.1..]);
-
-      if total_lines >= h {
-        break;
-      }
-
-      if offset.0 == buff.blocks.len() -1 {
-        break;
-      }
-
-      offset.0 += 1;
-      offset.1 = 0;
-    }
-
-    if total_lines >= h {
-      return init_offset;
-    }
-
-    if init_offset.1 > 0 {
-      offset = init_offset.clone();
-    } else if init_offset.0 > 0 {
-      offset.0 = init_offset.0 - 1;
-      offset.1 = buff.block_size as usize;
-    }
-
-    loop {
-      let block = buff.blocks.get(offset.0).unwrap();
-      total_lines += lines_num(&block.data()[..offset.1]);
-
-      if total_lines >= h {
-        break;
-      }
-
-      if offset.0 == 0 {
-        break;
-      }
-
-      offset.0 -= 1;
-      offset.1 = buff.block_size as usize;
-    }
-
-    offset.1 = 0;
-
-    if init_offset.0 < offset.0 {
-      offset = init_offset.clone();
-    }
-
-    offset
-  }
-
-
-  fn build_lines(&self, data: &[String], w: usize) -> Vec<String> {
-    data
-      .iter()
+  fn build_lines(data: &[String], w: usize) -> Vec<String>{
+    data.iter()
       .flat_map(|line| {
         let mut chars: Vec<char> = line.chars().collect();
+
         if chars.is_empty() {
           chars.push('\n');
         }
+
         chars.chunks(w)
-          .map(|ch| ch.into_iter().collect::<String>())
-          .collect::<Vec<String>>()
+            .map(|ch| {
+              ch.into_iter().collect::<String>()
+            })
+            .collect::<Vec<String>>()
+
       })
       .collect::<Vec<String>>()
   }
@@ -302,73 +225,5 @@ impl Project {
 
 #[cfg(test)]
 mod project_tests {
-  use std::sync::{Arc, Mutex};
-  use crate::buffer::Buff;
-  use crate::project::Project;
 
-  fn create_buff() -> Buff {
-    Buff::new(
-      [
-        "1*1*1*1".to_string(),
-        "2*2*2*2".to_string(),
-        "3*3*3*3".to_string(),
-        "4*4*4*4".to_string(),
-        "5*5*5*5".to_string(),
-      ].to_vec(),
-      2
-    )
-  }
-
-  #[test]
-  fn render_when_block_contains_all_data() {
-    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let buff = create_buff();
-    project.buff = Arc::new(Mutex::new(buff));
-    project.offset2 = Arc::new(Mutex::new((1, 1)));
-
-    assert_eq!(
-      project.render(3, 2),
-      [
-        "4*4",
-        "*4*",
-      ]
-    );
-  }
-
-  #[test]
-  fn render_when_data_spans_current_and_next_blocks() {
-    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let buff = create_buff();
-    project.buff = Arc::new(Mutex::new(buff));
-    project.offset2 = Arc::new(Mutex::new((1, 1)));
-
-    assert_eq!(
-      project.render(3, 4),
-      [
-        "4*4",
-        "*4*",
-        "4",
-        "5*5",
-      ]
-    );
-  }
-
-  #[test]
-  fn render_when_data_spans_current_and_next_and_previous_blocks() {
-    let mut project = Project::new("Foo".to_string(), "Bar".to_string(), "Ban".to_string());
-    let buff = create_buff();
-    project.buff = Arc::new(Mutex::new(buff));
-    project.offset2 = Arc::new(Mutex::new((1, 1)));
-
-    assert_eq!(
-      project.render(5, 5),
-      [
-        "*3",
-        "4*4*4",
-        "*4",
-        "5*5*5",
-        "*5",
-      ]
-    );
-  }
 }
