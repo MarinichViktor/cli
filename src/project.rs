@@ -3,9 +3,9 @@ use crate::result::{Result};
 use std::io::{BufReader};
 use std::sync::Arc;
 use std::io::BufRead;
-use std::sync::mpsc::{channel};
+use std::sync::mpsc::{channel, Sender};
 use std::time::Duration;
-use std::process::{Command, Stdio};
+use std::process::{ChildStdout, Command, Stdio};
 use serde::{Deserialize, Serialize};
 
 static PROCESS_DELAY: u64 = 200;
@@ -96,6 +96,18 @@ impl Project {
     }
   }
 
+  fn spawn_project_cmd(&self) -> Result<Child> {
+    let child = Command::new("/bin/bash")
+        .arg("-c")
+        .arg(self.executable.as_str())
+        .current_dir(self.workdir.as_str())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .stdin(Stdio::null())
+        .spawn()?;
+    Ok(child)
+  }
+
   pub fn run(&mut self) -> Result<()> {
     let mut status = self.status.lock().unwrap();
 
@@ -105,14 +117,7 @@ impl Project {
 
     status.is_running = true;
     status.started_at = Some(Instant::now());
-    let mut child = Command::new("/bin/bash")
-      .arg("-c")
-      .arg(self.executable.as_str())
-      .current_dir(self.workdir.as_str())
-      .stdout(Stdio::piped())
-      .stderr(Stdio::piped())
-      .stdin(Stdio::null())
-      .spawn()?;
+    let mut child = self.spawn_project_cmd()?;
 
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
@@ -187,7 +192,7 @@ impl Project {
     let offset = { *self.offset.lock().unwrap() };
 
     if output.cache.len() > h {
-      let start_index = ((output.cache.len() as i32)  - (h as i32) - offset).max(0) as usize;
+      let start_index = ((output.cache.len() as i32)  - (h as i32) - offset).max(0).min((output.cache.len() - h) as i32) as usize;
       output.cache[start_index..(start_index + h)].to_vec()
     } else {
       output.cache.clone()
