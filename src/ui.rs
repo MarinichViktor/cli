@@ -6,7 +6,7 @@ use tui::{
   layout::{Constraint, Direction, Layout, Rect},
 };
 use crate::app::{App, AppTab};
-
+//░
 static SIDEBAR_ITEM_TEXT_ACTIVE_COLOR: Color = Color::Rgb(198, 198, 102);
 static SIDEBAR_ITEM_TEXT_COLOR: Color = Color::DarkGray;
 // static SIDEBAR_ITEM_BACKGROUND: Color = Color::DarkGray;
