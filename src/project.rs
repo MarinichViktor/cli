@@ -8,7 +8,8 @@ use std::time::Duration;
 use std::process::{ChildStdout, Command, Stdio};
 use serde::{Deserialize, Serialize};
 
-static PROCESS_DELAY: u64 = 200;
+static PROCESS_DELAY: u64 = 100;
+static OUTPUT_SIZE_THRESHOLD: usize = 3000;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProjectDescriptor {
@@ -167,6 +168,17 @@ impl Project {
 
           if cache_width > 0 {
             data.cache.append(&mut Project::build_lines(&buff, cache_width));
+          }
+
+          let output_len = data.output.len();
+          let cache_len = data.cache.len();
+
+          if output_len > OUTPUT_SIZE_THRESHOLD {
+            data.output = data.output.split_off(output_len - OUTPUT_SIZE_THRESHOLD)
+          }
+
+          if cache_len > OUTPUT_SIZE_THRESHOLD {
+            data.cache = data.cache.split_off(cache_len - OUTPUT_SIZE_THRESHOLD)
           }
         }
 
