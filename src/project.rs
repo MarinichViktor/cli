@@ -1,112 +1,72 @@
-use std::{sync::Mutex, time::Instant, vec, process::Child};
+use std::{sync::Mutex, time::Instant, vec};
 use crate::result::{Result};
 use std::io::{BufReader};
 use std::sync::Arc;
 use std::io::BufRead;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
-use std::process::{ChildStdout, Command, Stdio};
+use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
 
 static PROCESS_DELAY: u64 = 100;
 static OUTPUT_SIZE_THRESHOLD: usize = 3000;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct ProjectDescriptor {
-  pub name: String,
-  pub executable: String,
-  pub workdir: String,
-}
-
-pub struct ProjectOutput {
-  pub output: Vec<String>,
-  pub cached_width: usize,
-  pub cache: Vec<String>,
-}
-
-impl ProjectOutput {
-  pub fn clear(&mut self) {
-    self.output.clear();
-    self.cache.clear();
-    self.cached_width = 0;
-  }
-}
-
 // todo: to be refactored
-pub struct Project {
-  pub name: String,
-  pub executable: String,
-  pub workdir: String,
-  pub output: Arc<Mutex<ProjectOutput>>,
-  pub child: Option<Child>,
-  pub offset: Arc<Mutex<i32>>,
-  pub status: Arc<Mutex<ProcessStatus>>,
+pub struct Cmd {
+  pub descriptor: CmdDescriptor,
+  pub status: Arc<Mutex<Status>>,
+  pub output: Arc<Mutex<CmdOutput>>,
+  pub unsubscribe: Option<Box<dyn FnOnce() -> ()>>
 }
 
-impl<'a> From<ProjectDescriptor> for Project {
-  fn from(descriptor: ProjectDescriptor) -> Self {
-    Project::new(descriptor.name, descriptor.executable, descriptor.workdir)
+impl<'a> From<CmdDescriptor> for Cmd {
+  fn from(descriptor: CmdDescriptor) -> Self {
+    Cmd::new(descriptor)
   }
 }
 
-pub struct ProcessStatus {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CmdDescriptor {
+  pub name: String,
+  pub executable: String,
+  pub workdir: String,
+}
+
+#[derive(Default)]
+pub struct CmdOutput {
+  pub data: Vec<String>,
+  pub data_cache: (Vec<String>, usize),
+  pub offset: i32
+}
+
+impl CmdOutput {
+  pub fn clear(&mut self) {
+    self.data.clear();
+    self.data_cache.0.clear();
+    self.offset = 0;
+  }
+}
+
+pub struct Status {
   pub started_at: Option<Instant>,
   pub is_running: bool,
 }
 
-impl Project {
-  pub fn new(name: String, executable: String, workdir: String) -> Self {
-    Project {
-      name,
-      executable,
-      workdir,
-      output: Arc::new(Mutex::new(ProjectOutput {
-        output: vec![],
-        cached_width: 0,
-        cache: vec![]
-      })),
-      child: None,
-      offset: Arc::new(Mutex::new(0)),
+impl Cmd {
+  pub fn new(descriptor: CmdDescriptor) -> Self {
+    Cmd {
+      descriptor,
+      output: Arc::new(Mutex::new(CmdOutput::default())),
+      unsubscribe: None,
       status: Arc::new(
         Mutex::new(
-          ProcessStatus {
+          Status {
             is_running: false,
             started_at: None
           }
         )
       )
     }
-  }
-
-  pub fn stop(&mut self) -> Result<bool>  {
-    let mut status = self.status.lock().unwrap();
-
-    if !status.is_running {
-      return Ok(false);
-    }
-
-    if let Some(mut child) = self.child.take() {
-      status.is_running = false;
-      self.output.lock().unwrap().clear();
-      child.kill()?;
-      child.wait()?;
-
-      Ok(true)
-    } else {
-      Ok(false)
-    }
-  }
-
-  fn spawn_project_cmd(&self) -> Result<Child> {
-    let child = Command::new("/bin/bash")
-        .arg("-c")
-        .arg(self.executable.as_str())
-        .current_dir(self.workdir.as_str())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .stdin(Stdio::null())
-        .spawn()?;
-    Ok(child)
   }
 
   pub fn run(&mut self) -> Result<()> {
@@ -118,67 +78,40 @@ impl Project {
 
     status.is_running = true;
     status.started_at = Some(Instant::now());
-    let mut child = self.spawn_project_cmd()?;
 
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    let (sender, receiver) = channel();
-    let stdout_sender = sender.clone();
-
-    // todo: to be refactored
-    let project_status = self.status.clone();
-    let project_output = self.output.clone();
-    // TODO: push data into temp vector and update it each n seconds
-    std::thread::spawn(move || {
-      let reader = BufReader::new(stdout);
-
-      for line in reader.lines() {
-        stdout_sender.send(line.unwrap()).unwrap();
-      }
-
-      let mut status = project_status.lock().unwrap();
-      status.started_at = None;
-      status.is_running = false;
-      project_output.lock().unwrap().clear();
-    });
-
-    let stderr_sender = sender.clone();
-    std::thread::spawn(move || {
-      let reader = BufReader::new(stderr);
-
-      for line in reader.lines() {
-        stderr_sender.send(line.unwrap()).unwrap();
-      }
-    });
-
-    let out = self.output.clone();
+    let (data_stream, stop_cmd, close_stream) = self.spawn()?;
+    self.unsubscribe = Some(Box::new(stop_cmd));
+    let status = self.status.clone();
+    let output = self.output.clone();
 
     std::thread::spawn(move || {
       loop {
-        let mut buff = vec![];
-
-        for line in receiver.try_iter() {
-          buff.push(line);
+        if !status.lock().unwrap().is_running {
+          break;
         }
 
-        if !buff.is_empty() {
-          let mut data = out.lock().unwrap();
-          data.output.append(&mut buff.clone());
-          let cache_width = data.cached_width;
+        for _ in close_stream.try_iter() {
+          break;
+        }
+
+        for buff in data_stream.try_iter() {
+          let mut data = output.lock().unwrap();
+          data.data.append(&mut buff.clone());
+          let cache_width = data.data_cache.1;
 
           if cache_width > 0 {
-            data.cache.append(&mut Project::build_lines(&buff, cache_width));
+            data.data_cache.0.append(&mut Cmd::build_lines(&buff, cache_width));
           }
 
-          let output_len = data.output.len();
-          let cache_len = data.cache.len();
+          let output_len = data.data.len();
+          let cache_len = data.data_cache.0.len();
 
           if output_len > OUTPUT_SIZE_THRESHOLD {
-            data.output = data.output.split_off(output_len - OUTPUT_SIZE_THRESHOLD)
+            data.data = data.data.split_off(output_len - OUTPUT_SIZE_THRESHOLD)
           }
 
           if cache_len > OUTPUT_SIZE_THRESHOLD {
-            data.cache = data.cache.split_off(cache_len - OUTPUT_SIZE_THRESHOLD)
+            data.data_cache.0 = data.data_cache.0.split_off(cache_len - OUTPUT_SIZE_THRESHOLD)
           }
         }
 
@@ -186,28 +119,106 @@ impl Project {
       }
     });
 
-    self.child = Some(child);
-
     Ok(())
+  }
+
+  fn spawn(&self) -> Result<(Receiver<Vec<String>>, impl FnOnce() -> (), Receiver<()>)> {
+    let mut child = Command::new("/bin/bash")
+      .arg("-c")
+      .arg(self.descriptor.executable.as_str())
+      .current_dir(self.descriptor.workdir.as_str())
+      .stdout(Stdio::piped())
+      .stderr(Stdio::piped())
+      .stdin(Stdio::null())
+      .spawn()?;
+
+    let stdout = child.stdout.take().unwrap();
+    let stderr = child.stderr.take().unwrap();
+    let (tx, rx) = channel();
+    let stdout_tx = tx.clone();
+    let (ctx, crx) = channel();
+
+    std::thread::spawn(move || {
+      let reader = BufReader::new(stdout);
+
+      for line in reader.lines() {
+        stdout_tx.send(line.unwrap()).unwrap();
+      }
+
+      let _ = ctx.send(());
+    });
+
+    let stderr_tx = tx.clone();
+    std::thread::spawn(move || {
+      let reader = BufReader::new(stderr);
+
+      for line in reader.lines() {
+        stderr_tx.send(line.unwrap()).unwrap();
+      }
+    });
+
+    let (tx2, rx2) = channel();
+    std::thread::spawn(move || {
+      loop {
+        let mut buff = vec![];
+
+        for line in rx.try_iter() {
+          buff.push(line);
+        }
+
+        if !buff.is_empty() {
+          let _ = tx2.send(buff);
+        }
+
+        std::thread::sleep(Duration::from_millis(PROCESS_DELAY));
+      }
+    });
+
+    let stop = move || {
+      match child.try_wait() {
+        Ok(_) => {},
+        Err(_) => {
+          child.kill().unwrap();
+          child.wait().unwrap();
+        }
+      }
+    };
+
+    Ok((rx2, stop, crx))
+  }
+
+  pub fn stop(&mut self) -> Result<bool>  {
+    let mut status = self.status.lock().unwrap();
+
+    if !status.is_running {
+      return Ok(false);
+    }
+
+    if let Some(unsubscriber) = self.unsubscribe.take() {
+      status.is_running = false;
+      self.output.lock().unwrap().clear();
+      unsubscriber();
+      Ok(true)
+    } else {
+      Ok(false)
+    }
   }
 
   pub fn render(&self, w: usize, h: usize) -> Vec<String> {
     let mut output = self.output.lock().unwrap();
 
-    if output.cached_width != w {
-      let cached_lines = Project::build_lines(&output.output, w);
+    if output.data_cache.1 != w {
+      let cached_lines = Cmd::build_lines(&output.data, w);
 
-      output.cache = cached_lines;
-      output.cached_width = w;
+      output.data_cache.0 = cached_lines;
+      output.data_cache.1 = w;
     }
 
-    let offset = { *self.offset.lock().unwrap() };
-
-    if output.cache.len() > h {
-      let start_index = ((output.cache.len() as i32)  - (h as i32) - offset).max(0).min((output.cache.len() - h) as i32) as usize;
-      output.cache[start_index..(start_index + h)].to_vec()
+    if output.data_cache.0.len() > h {
+      let start_index = ((output.data_cache.0.len() as i32)  - (h as i32) - output.offset).max(0).min((output.data_cache.0.len() - h) as i32) as usize;
+      output.data_cache.0[start_index..(start_index + h)].to_vec()
     } else {
-      output.cache.clone()
+      output.data_cache.0.clone()
     }
   }
 

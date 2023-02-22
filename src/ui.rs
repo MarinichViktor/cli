@@ -41,7 +41,7 @@ pub fn render_ui<B: Backend>(frame: &mut Frame<B>, app: &mut App) {
 fn render_sidebar<B: Backend>(frame: &mut Frame<B>, area: Rect, app:  &App) {
   let items = app.projects.iter()
     .map(|project| {
-      let mut name = project.name.clone();
+      let mut name = project.descriptor.name.clone();
       if project.status.lock().unwrap().is_running {
         name = format!("{} ◕", name);
       }

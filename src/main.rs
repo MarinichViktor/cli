@@ -1,6 +1,6 @@
 use std::process::exit;
 use std::time::{Duration, Instant};
-use term::project::{ProjectDescriptor};
+use term::project::{CmdDescriptor};
 use crossterm::execute;
 use crossterm::event::{Event};
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen};
@@ -17,7 +17,7 @@ fn main() -> Result<()> {
   }
 
   let data = std::fs::read_to_string(args[0].as_str()).unwrap();
-  let projects: Vec<ProjectDescriptor> = serde_json::from_str(data.as_str())?;
+  let projects: Vec<CmdDescriptor> = serde_json::from_str(data.as_str())?;
 
   if let Err(e) = run(projects) {
     println!("Exited with error: {}", e);
@@ -26,7 +26,7 @@ fn main() -> Result<()> {
   Ok(())
 }
 
-fn run(projects: Vec<ProjectDescriptor>) -> Result<()> {
+fn run(projects: Vec<CmdDescriptor>) -> Result<()> {
   let mut out = std::io::stdout();
   let mut app = App {
     projects: projects.into_iter()

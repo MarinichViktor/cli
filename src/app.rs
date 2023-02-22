@@ -1,12 +1,12 @@
 use std::{vec};
 use crossterm::event::{KeyCode, KeyEvent};
 use tui::layout::Rect;
-use crate::project::{Project};
+use crate::project::{Cmd};
 use crate::result::{Result};
 
 pub struct App {
   pub content: String,
-  pub projects: Vec<Project>,
+  pub projects: Vec<Cmd>,
   pub selected_project_index: u8,
   pub active_tab: AppTab,
   pub should_exit: bool,
@@ -18,7 +18,7 @@ impl App {
     self.selected_project().render(w, h)
   }
 
-  pub fn selected_project<'a>(&'a mut self) -> &'a mut Project {
+  pub fn selected_project<'a>(&'a mut self) -> &'a mut Cmd {
     &mut self.projects[self.selected_project_index as usize]
   }
 
@@ -54,11 +54,8 @@ impl App {
         match ch {
           'q' => {
             for project in self.projects.iter_mut() {
-              if let Some(ch) = &mut project.child {
-                match ch.try_wait() {
-                  Ok(Some(_)) => {},
-                  _ => ch.kill()?,
-                }
+              if let Some(unsubscriber) = project.unsubscribe.take() {
+                unsubscriber();
               }
             }
 
@@ -73,28 +70,28 @@ impl App {
       KeyCode::Up => match self.active_tab {
         AppTab::Sidebar => self.select_prev(),
         AppTab::Console => {
-          *self.selected_project().offset.lock().unwrap() += 1;
+          self.selected_project().output.lock().unwrap().offset += 1;
         }
       },
       KeyCode::Down => match self.active_tab {
         AppTab::Sidebar => self.select_next(),
         AppTab::Console => {
-          let mut offset = self.selected_project().offset.lock().unwrap();
-          *offset = (*offset - 1).max(0);
+          let mut output = self.selected_project().output.lock().unwrap();
+          output.offset = (output.offset - 1).max(0);
         }
       },
       KeyCode::PageDown => {
         if let AppTab::Console = self.active_tab {
             let x = self.console_widget_size;
-            let mut curr_offset = self.selected_project().offset.lock().unwrap();
-            *curr_offset = (*curr_offset - x.height as i32).max(0);
+            let mut output = self.selected_project().output.lock().unwrap();
+          output.offset = (output.offset - x.height as i32).max(0);
         }
       },
       KeyCode::PageUp => {
         if let AppTab::Console = self.active_tab {
           let x = self.console_widget_size;
-        let mut curr_offset = self.selected_project().offset.lock().unwrap();
-        *curr_offset += x.height as i32;
+        let mut output = self.selected_project().output.lock().unwrap();
+          output.offset += x.height as i32;
         }
       }
       _ => {}
