@@ -7,6 +7,7 @@ use std::sync::mpsc::{channel, Receiver};
 use std::time::Duration;
 use std::process::{Command, Stdio};
 use serde::{Deserialize, Serialize};
+use tui::text::Text;
 
 static PROCESS_DELAY: u64 = 100;
 static OUTPUT_SIZE_THRESHOLD: usize = 3000;
@@ -86,12 +87,20 @@ impl Cmd {
 
     std::thread::spawn(move || {
       loop {
-        if !status.lock().unwrap().is_running {
-          break;
-        }
+        {
+          let mut status = status.lock().unwrap();
+          if !status.is_running {
+            break;
+          }
 
-        for _ in close_stream.try_iter() {
-          break;
+          // todo: enum
+          for exit_status in close_stream.try_iter() {
+            status.is_running = false;
+            if exit_status == 0 {
+              output.lock().unwrap().clear();
+            }
+            break;
+          }
         }
 
         for buff in data_stream.try_iter() {
@@ -122,7 +131,7 @@ impl Cmd {
     Ok(())
   }
 
-  fn spawn(&self) -> Result<(Receiver<Vec<String>>, impl FnOnce() -> (), Receiver<()>)> {
+  fn spawn(&self) -> Result<(Receiver<Vec<String>>, impl FnOnce() -> (), Receiver<u8>)> {
     let mut child = Command::new("/bin/bash")
       .arg("-c")
       .arg(self.descriptor.executable.as_str())
@@ -137,6 +146,7 @@ impl Cmd {
     let (tx, rx) = channel();
     let stdout_tx = tx.clone();
     let (ctx, crx) = channel();
+    let ctx2 = ctx.clone();
 
     std::thread::spawn(move || {
       let reader = BufReader::new(stdout);
@@ -145,7 +155,7 @@ impl Cmd {
         stdout_tx.send(line.unwrap()).unwrap();
       }
 
-      let _ = ctx.send(());
+      let _ = ctx.send(0);
     });
 
     let stderr_tx = tx.clone();
@@ -155,6 +165,8 @@ impl Cmd {
       for line in reader.lines() {
         stderr_tx.send(line.unwrap()).unwrap();
       }
+
+      let _ = ctx2.send(1);
     });
 
     let (tx2, rx2) = channel();
@@ -176,8 +188,8 @@ impl Cmd {
 
     let stop = move || {
       match child.try_wait() {
-        Ok(_) => {},
-        Err(_) => {
+        Ok(Some(x)) => {},
+        _ => {
           child.kill().unwrap();
           child.wait().unwrap();
         }
